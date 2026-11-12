@@ -72,17 +72,20 @@ export function stageReset(): void {
   execFileSync(path.join(ROOT, 'scripts/stage-reset.sh'), [], { env: { ...process.env, CONFIRM: 'yes' }, stdio: 'ignore', timeout: 180_000 });
 }
 
-/** Response headers from the console, TLS verified against the lab CA only. */
-export function servedHeaders(p: string): Promise<Record<string, string | string[] | undefined>> {
+/** A GET to the console: status and headers, TLS verified against the lab CA only. */
+export function served(p: string): Promise<{ status: number; headers: Record<string, string | string[] | undefined> }> {
   return new Promise((resolve, reject) => {
     https
       .get({ host: 'localhost', port: Number(conf('VID_PORT_WEB')), path: p, ca: [fs.readFileSync(LAB_CA)] }, (r) => {
         r.resume();
-        resolve(r.headers);
+        resolve({ status: r.statusCode || 0, headers: r.headers });
       })
       .on('error', reject);
   });
 }
+
+/** Response headers from the console, TLS verified against the lab CA only. */
+export const servedHeaders = async (p: string) => (await served(p)).headers;
 
 /** A POST to the console with chosen headers (e.g. a foreign Origin), TLS verified against the lab CA only. */
 export function servedPost(p: string, headers: Record<string, string>): Promise<number> {

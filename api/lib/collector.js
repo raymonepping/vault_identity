@@ -59,7 +59,7 @@ export function createCollector({ store, audits, pgLog, namespace, lookupLease, 
         } catch {
           continue; // not JSON: not evidence
         }
-        if (!rec || Date.parse(rec.at) < Date.parse(since() || 0)) continue;
+        if (!rec || (since() && Date.parse(rec.at) < Date.parse(since()))) continue;
         if (store.add({ source, id: rec.id, at: rec.at, body: line, facts: rec.facts })) {
           added++;
           status[source] = { ...status[source], last_event: rec.at };

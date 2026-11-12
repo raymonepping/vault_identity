@@ -4,7 +4,7 @@
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { chromium } from '@playwright/test';
-import { labCaSpkiArg, servedHeaders, stageReset } from './helpers/env';
+import { labCaSpkiArg, served, stageReset } from './helpers/env';
 import { signIn } from './helpers/auth';
 
 const CORE = ['vid-vault_s', 'vid-vault_1', 'vid-vault_2', 'vid-vault_3', 'vid-postgres', 'vid-api', 'vid-web'];
@@ -14,8 +14,9 @@ export default async function globalSetup(): Promise<void> {
   const running = execFileSync('podman', ['ps', '--filter', 'name=^vid-', '--format', '{{.Names}}'], { encoding: 'utf8' }).split('\n');
   const down = CORE.filter((c) => !running.includes(c));
   if (down.length) throw new Error(`not running: ${down.join(', ')}: run "make up"`);
-  const h = await servedHeaders('/api/healthz').catch(() => null);
-  if (!h) throw new Error('the console does not answer /api/healthz: run "make doctor"');
+  // 200 only: with the API down, nginx itself answers 502.
+  const h = await served('/api/healthz').catch(() => null);
+  if (h?.status !== 200) throw new Error(`the API behind the console is not healthy (${h ? `HTTP ${h.status}` : 'no answer'}): run "make doctor"`);
   stageReset();
   const browser = await chromium.launch({ args: [labCaSpkiArg()] });
   const page = await browser.newPage();

@@ -199,3 +199,19 @@ fixed:
 
 Results: unit tests 52 (API) + 5, `make probe` 59/59, `make verify` 79/0
 (165 s), `make test-ui` 24/0, rehearsal 56 (inside verify).
+
+## Prompt 99: clean round 2 (2026-11-12)
+
+Committed round 1 (`c9c2c1c`). The four reviews on the round-1 state found
+three, all fixed:
+
+- 23: The e2e setup took any answer from `/api/healthz` as healthy; with the
+  API stopped, nginx answers 502 (measured). `served()` returns the status;
+  setup requires 200.
+- 24: `Date.parse(since() || 0)` parsed `0` as the year 2000; now no ingest
+  boundary means nothing is skipped.
+- 25: `npm run dev` could not run a case: the dev server's own origin is
+  refused by the API's cross-site check. No make target used it: the dev
+  server config and the `dev` and `preview` scripts are gone.
+
+Results: `make verify` 79/0 (162 s), `make test-ui` 24/0, unit tests 52 + 5.
