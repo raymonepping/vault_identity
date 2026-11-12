@@ -215,3 +215,18 @@ three, all fixed:
   server config and the `dev` and `preview` scripts are gone.
 
 Results: `make verify` 79/0 (162 s), `make test-ui` 24/0, unit tests 52 + 5.
+
+## Prompt 99: clean round 3 (2026-11-12): zero to-dos
+
+Committed round 2 (`79bc196`). The four reviews on the round-2 state found
+nothing to fix. Not to-dos, because they are recorded decisions:
+
+- Error responses are text plus an HTTP status, without stable codes: the
+  only client is this lab's console, which shows the text.
+- The API holds the lab issuer's key and runs the agents: the stage-hand
+  shortcut (D11, D12, `docs/security-model.md`).
+- The evidence store is one SQLite file on the event loop: a `shortcut:`
+  comment in `api/lib/store.js` states the measured limit (10,000 runs).
+
+The loop ends here: `make verify` 79/0, `make test-ui` 24/0, `make probe`
+59/59, `make lab` from nothing 142 s, tree clean after this commit.
