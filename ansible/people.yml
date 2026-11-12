@@ -1,0 +1,9 @@
+# Phase 10 (ansible people): Noor's userpass password (.secrets/people/noor),
+# the workload's AppRole role id and secret id (.secrets/approle/), and the
+# console's token (.secrets/vault/tokens/console), with the ansible-platform
+# token. Noor's policies sit on her entity (Terraform), not on the user.
+- name: Noor, the workload and the console token
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - people

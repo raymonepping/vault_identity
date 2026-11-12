@@ -1,0 +1,154 @@
+# Phase 13 (ansible validate): read-only. Noor signs in and is the entity
+# Terraform made (her userpass door); the console token reads the registry,
+# the profile and the labels; payments-batch logs in with its secret id and
+# carries its metadata; nothing here reads a secret value.
+- name: Validate the identity stage
+  hosts: localhost
+  gather_facts: false
+  vars:
+    v_ns: "{{ vid_cluster_addr }}/v1/{{ vid_namespace }}"
+    v_console: "{{ lookup('ansible.builtin.file', vid_tokens_dir + '/console') }}"
+    v_cases: "{{ lookup('ansible.builtin.file', vid_root + '/config/cases.json') | from_json }}"
+  tasks:
+    - name: Noor signs in through userpass
+      ansible.builtin.uri:
+        url: "{{ v_ns }}/auth/userpass/login/noor"
+        ca_path: "{{ vid_ca }}"
+        method: POST
+        body_format: json
+        body:
+          password: "{{ lookup('ansible.builtin.file', vid_root + '/.secrets/people/noor') }}"
+      register: v_noor
+      check_mode: false
+      no_log: true
+
+    - name: Noor's entity (by name, console token)
+      ansible.builtin.uri:
+        url: "{{ v_ns }}/identity/entity/name/noor"
+        ca_path: "{{ vid_ca }}"
+        headers: { X-Vault-Token: "{{ v_console }}" }
+      register: v_noor_entity
+      check_mode: false
+
+    - name: Her login is that entity, with obs-noor from the entity and two doors
+      ansible.builtin.assert:
+        that:
+          - v_noor.json.auth.entity_id == v_noor_entity.json.data.id
+          - "'obs-noor' in v_noor.json.auth.identity_policies"
+          - v_noor_entity.json.data.aliases | length == 2
+        quiet: true
+
+    - name: Noor's capabilities (her own token)
+      ansible.builtin.uri:
+        url: "{{ v_ns }}/sys/capabilities-self"
+        ca_path: "{{ vid_ca }}"
+        method: POST
+        headers: { X-Vault-Token: "{{ v_noor.json.auth.client_token }}" }
+        body_format: json
+        body:
+          paths: [kv/data/finance/reconciliation-api, database/creds/finance-readonly, kv/metadata/finance/reconciliation-api]
+      register: v_caps
+      check_mode: false
+      no_log: true
+
+    - name: Noor may read the key and get credentials, not the metadata endpoint
+      ansible.builtin.assert:
+        that:
+          - "'read' in v_caps.json.data['kv/data/finance/reconciliation-api']"
+          - "'read' in v_caps.json.data['database/creds/finance-readonly']"
+          - "v_caps.json.data['kv/metadata/finance/reconciliation-api'] == ['deny']"
+        quiet: true
+
+    - name: Revoke the validation login
+      ansible.builtin.uri:
+        url: "{{ v_ns }}/auth/token/revoke-self"
+        ca_path: "{{ vid_ca }}"
+        method: POST
+        headers: { X-Vault-Token: "{{ v_noor.json.auth.client_token }}" }
+        status_code: [204]
+      check_mode: false
+      changed_when: false
+      no_log: true
+
+    - name: The Agent Registry records
+      ansible.builtin.uri:
+        url: "{{ v_ns }}/agent-registry/registration/display-name/{{ item }}"
+        ca_path: "{{ vid_ca }}"
+        headers: { X-Vault-Token: "{{ v_console }}" }
+      loop: [ledger-agent, finance-agent]
+      register: v_agents
+      check_mode: false
+
+    - name: Both agents are registered; only the finance agent has a real ceiling
+      ansible.builtin.assert:
+        that:
+          - v_agents.results[0].json.data.owner == 'finance-platform'
+          - "'obs-finance-ceiling' not in v_agents.results[0].json.data.ceiling_policies"
+          - "'obs-finance-ceiling' in v_agents.results[1].json.data.ceiling_policies"
+        quiet: true
+
+    - name: The OAuth resource server profile
+      ansible.builtin.uri:
+        url: "{{ v_ns }}/sys/config/oauth-resource-server/corvid-issuer"
+        ca_path: "{{ vid_ca }}"
+        headers: { X-Vault-Token: "{{ v_console }}" }
+      register: v_profile
+      check_mode: false
+
+    - name: The profile trusts the lab issuer in static key mode
+      ansible.builtin.assert:
+        that:
+          - v_profile.json.data.enabled
+          - not v_profile.json.data.use_jwks
+          - not v_profile.json.data.optional_authorization_details
+        quiet: true
+
+    - name: The labels of each KV secret
+      ansible.builtin.uri:
+        url: "{{ v_ns }}/kv/metadata/{{ item.value.path | regex_replace('^kv/data/', '') }}"
+        ca_path: "{{ vid_ca }}"
+        headers: { X-Vault-Token: "{{ v_console }}" }
+      loop: "{{ v_cases.secrets | dict2items | selectattr('value.kind', 'eq', 'kv_v2') | list }}"
+      loop_control:
+        label: "{{ item.key }}"
+      register: v_meta
+      check_mode: false
+
+    - name: The labels match config/cases.json
+      ansible.builtin.assert:
+        that: item.json.data.custom_metadata == item.item.value.labels
+        quiet: true
+      loop: "{{ v_meta.results }}"
+      loop_control:
+        label: "{{ item.item.key }}"
+
+    - name: The workload payments-batch logs in with its secret id
+      ansible.builtin.uri:
+        url: "{{ v_ns }}/auth/approle/login"
+        ca_path: "{{ vid_ca }}"
+        method: POST
+        body_format: json
+        body:
+          role_id: "{{ lookup('ansible.builtin.file', vid_root + '/.secrets/approle/payments-batch/role_id') }}"
+          secret_id: "{{ lookup('ansible.builtin.file', vid_root + '/.secrets/approle/payments-batch/secret_id') }}"
+      register: v_batch
+      check_mode: false
+      no_log: true
+
+    - name: Its token carries the workload metadata and only its policy
+      ansible.builtin.assert:
+        that:
+          - v_batch.json.auth.metadata.application == 'payments-batch'
+          - "'obs-payments-batch' in v_batch.json.auth.token_policies"
+        quiet: true
+
+    - name: Revoke the workload's validation token
+      ansible.builtin.uri:
+        url: "{{ v_ns }}/auth/token/revoke-self"
+        ca_path: "{{ vid_ca }}"
+        method: POST
+        headers: { X-Vault-Token: "{{ v_batch.json.auth.client_token }}" }
+        status_code: [204]
+      check_mode: false
+      changed_when: false
+      no_log: true

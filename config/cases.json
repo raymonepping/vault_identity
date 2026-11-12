@@ -1,0 +1,324 @@
+{
+  "company": "Corvid Ledger (fictional)",
+  "principals": {
+    "noor": {
+      "display": "Noor Haddad",
+      "role": "Finance analyst",
+      "flow": "human",
+      "auth": "userpass (console sign-in); JWT subject noor for delegation"
+    },
+    "ledger-agent": {
+      "display": "Ledger agent",
+      "role": "Nightly reconciliation bot",
+      "flow": "agent_autonomous",
+      "auth": "JWT from the lab issuer, sub agent:ledger-agent",
+      "subject": "agent:ledger-agent",
+      "owner": "finance-platform"
+    },
+    "finance-agent": {
+      "display": "Finance agent",
+      "role": "Noor's assistant",
+      "flow": "agent_obo",
+      "auth": "delegation JWT, sub noor, act.sub agent:finance-agent",
+      "actor": "agent:finance-agent",
+      "owner": "finance-platform"
+    },
+    "payments-batch": {
+      "display": "payments-batch",
+      "role": "Settlement batch job",
+      "flow": "workload",
+      "auth": "AppRole, secret id metadata application=payments-batch"
+    }
+  },
+  "secrets": {
+    "reconciliation-api": {
+      "kind": "kv_v2",
+      "path": "kv/data/finance/reconciliation-api",
+      "labels": {
+        "owner": "finance-platform",
+        "application": "reconciliation",
+        "environment": "lab",
+        "team": "finance",
+        "purpose": "monthly-reconciliation",
+        "classification": "confidential",
+        "workload": "ledger-agent",
+        "managed_by": "ansible"
+      },
+      "value": {
+        "api_key": "corvid-recon-demo-key-0001",
+        "endpoint": "https://ledger.corvid.example/api"
+      }
+    },
+    "payroll-export": {
+      "kind": "kv_v2",
+      "path": "kv/data/finance/payroll-export",
+      "labels": {
+        "owner": "people-ops",
+        "application": "payroll",
+        "environment": "lab",
+        "team": "finance",
+        "purpose": "payroll-export",
+        "classification": "restricted",
+        "workload": "none",
+        "managed_by": "ansible"
+      },
+      "value": {
+        "export_file": "payroll-2026-10.csv",
+        "note": "synthetic, fictional"
+      }
+    },
+    "finance-readonly": {
+      "kind": "leased_dynamic",
+      "path": "database/creds/finance-readonly"
+    }
+  },
+  "cases": [
+    {
+      "id": 1,
+      "title": "Noor reads the reconciliation API key",
+      "flow": "human",
+      "principal": "noor",
+      "secret": "reconciliation-api",
+      "purpose": "reconciliation-review",
+      "steps": [
+        "read"
+      ],
+      "expect": {
+        "vault": "allowed",
+        "request": "Confirmed",
+        "use": "Partial"
+      }
+    },
+    {
+      "id": 2,
+      "title": "Noor requests database credentials and runs a query",
+      "flow": "human",
+      "principal": "noor",
+      "secret": "finance-readonly",
+      "purpose": "ledger-query",
+      "steps": [
+        "creds",
+        "connect",
+        "query",
+        "disconnect"
+      ],
+      "expect": {
+        "vault": "allowed",
+        "request": "Confirmed",
+        "use": "Correlated"
+      }
+    },
+    {
+      "id": 3,
+      "title": "The ledger agent reads the API key on its own",
+      "flow": "agent_autonomous",
+      "principal": "ledger-agent",
+      "secret": "reconciliation-api",
+      "purpose": "nightly-reconciliation",
+      "rar": [
+        {
+          "type": "vault:path_access",
+          "path": "kv/data/finance/reconciliation-api",
+          "capabilities": [
+            "read"
+          ]
+        }
+      ],
+      "steps": [
+        "read",
+        "app-event"
+      ],
+      "expect": {
+        "vault": "allowed",
+        "request": "Confirmed",
+        "use": "Correlated"
+      }
+    },
+    {
+      "id": 4,
+      "title": "The ledger agent requests database credentials and reconciles",
+      "flow": "agent_autonomous",
+      "principal": "ledger-agent",
+      "secret": "finance-readonly",
+      "purpose": "nightly-reconciliation",
+      "rar": [
+        {
+          "type": "vault:path_access",
+          "path": "database/creds/finance-readonly",
+          "capabilities": [
+            "read"
+          ]
+        }
+      ],
+      "steps": [
+        "creds",
+        "connect",
+        "query",
+        "disconnect"
+      ],
+      "expect": {
+        "vault": "allowed",
+        "request": "Confirmed",
+        "use": "Correlated"
+      }
+    },
+    {
+      "id": 5,
+      "title": "Noor delegates the API key read to the finance agent",
+      "flow": "agent_obo",
+      "principal": "finance-agent",
+      "subject": "noor",
+      "secret": "reconciliation-api",
+      "purpose": "monthly-reconciliation",
+      "rar": [
+        {
+          "type": "vault:path_access",
+          "path": "kv/data/finance/reconciliation-api",
+          "capabilities": [
+            "read"
+          ]
+        }
+      ],
+      "steps": [
+        "read",
+        "app-event"
+      ],
+      "expect": {
+        "vault": "allowed",
+        "request": "Confirmed",
+        "use": "Correlated"
+      }
+    },
+    {
+      "id": 6,
+      "title": "Noor delegates the monthly reconciliation to the finance agent",
+      "flow": "agent_obo",
+      "principal": "finance-agent",
+      "subject": "noor",
+      "secret": "finance-readonly",
+      "purpose": "monthly-reconciliation",
+      "rar": [
+        {
+          "type": "vault:path_access",
+          "path": "database/creds/finance-readonly",
+          "capabilities": [
+            "read"
+          ]
+        }
+      ],
+      "steps": [
+        "creds",
+        "connect",
+        "query",
+        "disconnect"
+      ],
+      "expect": {
+        "vault": "allowed",
+        "request": "Confirmed",
+        "use": "Correlated"
+      }
+    },
+    {
+      "id": 7,
+      "title": "Noor delegates the payroll export to the finance agent",
+      "flow": "agent_obo",
+      "principal": "finance-agent",
+      "subject": "noor",
+      "secret": "payroll-export",
+      "purpose": "payroll-export",
+      "rar": [
+        {
+          "type": "vault:path_access",
+          "path": "kv/data/finance/payroll-export",
+          "capabilities": [
+            "read"
+          ]
+        }
+      ],
+      "steps": [
+        "read"
+      ],
+      "expect": {
+        "vault": "denied",
+        "deniedBy": "ceiling",
+        "request": "Confirmed",
+        "use": "none"
+      }
+    },
+    {
+      "id": 8,
+      "title": "The finance agent asks for database credentials with a token scoped to the API key",
+      "flow": "agent_obo",
+      "principal": "finance-agent",
+      "subject": "noor",
+      "secret": "finance-readonly",
+      "purpose": "monthly-reconciliation",
+      "rar": [
+        {
+          "type": "vault:path_access",
+          "path": "kv/data/finance/reconciliation-api",
+          "capabilities": [
+            "read"
+          ]
+        }
+      ],
+      "steps": [
+        "creds"
+      ],
+      "expect": {
+        "vault": "denied",
+        "deniedBy": "rar",
+        "request": "Confirmed",
+        "use": "none"
+      }
+    },
+    {
+      "id": 9,
+      "title": "payments-batch requests credentials and never connects",
+      "flow": "workload",
+      "principal": "payments-batch",
+      "secret": "finance-readonly",
+      "purpose": "payments-settlement",
+      "steps": [
+        "creds"
+      ],
+      "expect": {
+        "vault": "allowed",
+        "request": "Confirmed",
+        "use": "Unmatched"
+      }
+    },
+    {
+      "id": 10,
+      "title": "A session outlives its revoked credential",
+      "flow": "agent_autonomous",
+      "principal": "ledger-agent",
+      "secret": "finance-readonly",
+      "purpose": "nightly-reconciliation",
+      "rar": [
+        {
+          "type": "vault:path_access",
+          "path": "database/creds/finance-readonly",
+          "capabilities": [
+            "read"
+          ]
+        }
+      ],
+      "steps": [
+        "creds",
+        "connect",
+        "query",
+        "revoke",
+        "query",
+        "reconnect",
+        "disconnect"
+      ],
+      "expect": {
+        "vault": "allowed",
+        "request": "Confirmed",
+        "use": "Correlated",
+        "afterRevoke": "session-connected-privileges-revoked"
+      }
+    }
+  ]
+}

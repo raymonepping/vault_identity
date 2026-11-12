@@ -1,0 +1,20 @@
+# make stage-reset (D20), the Vault half: revoke every credential the case
+# runs issued from database/creds/finance-readonly (the generated roles are
+# dropped by the role's revocation SQL). The labels go back with the stage
+# playbook, which scripts/stage-reset.sh runs next. The evidence store is the
+# API's half (POST /api/reset).
+- name: Revoke the runs' database credentials
+  hosts: localhost
+  gather_facts: false
+  vars:
+    r_ns: "{{ vid_cluster_addr }}/v1/{{ vid_namespace }}"
+  tasks:
+    - name: Revoke every finance-readonly lease
+      ansible.builtin.uri:
+        url: "{{ r_ns }}/sys/leases/revoke-prefix/database/creds/finance-readonly"
+        ca_path: "{{ vid_ca }}"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ lookup('ansible.builtin.file', vid_tokens_dir + '/ansible-platform') }}"
+        status_code: [204]
+      changed_when: true

@@ -1,0 +1,159 @@
+# people: runtime identity state (D8, D11, D14). Idempotent: a second run
+# reports changed=0. Every task that touches a secret is no_log.
+
+- name: Ensure the secret directories (0700)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    mode: "0700"
+  loop:
+    - "{{ vid_root }}/.secrets/people"
+    - "{{ people_approle_dir }}"
+
+# The password lookup creates the file once (0600 under the wrapper's umask)
+# and reads it afterwards; it never prints it.
+- name: Read or create Noor's password
+  ansible.builtin.set_fact:
+    people_noor_password: "{{ lookup('ansible.builtin.password', vid_root + '/.secrets/people/noor', length=32, chars=['ascii_letters', 'digits']) }}"
+  no_log: true
+
+- name: Does Noor's userpass user exist?
+  ansible.builtin.uri:
+    url: "{{ people_ns }}/auth/userpass/users/noor"
+    ca_path: "{{ vid_ca }}"
+    headers:
+      X-Vault-Token: "{{ people_token }}"
+    status_code: [200, 404]
+  register: people_noor
+  check_mode: false
+  no_log: true
+
+# Created once with the password; afterwards only the TTLs are kept right.
+- name: Create Noor's userpass user
+  ansible.builtin.uri:
+    url: "{{ people_ns }}/auth/userpass/users/noor"
+    ca_path: "{{ vid_ca }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ people_token }}"
+    body_format: json
+    body:
+      password: "{{ people_noor_password }}"
+      token_ttl: "{{ people_token_ttl | int }}"
+      token_max_ttl: "{{ people_token_max_ttl | int }}"
+    status_code: [204]
+  when: people_noor.status == 404
+  changed_when: true
+  no_log: true
+
+- name: Keep Noor's token TTLs
+  ansible.builtin.uri:
+    url: "{{ people_ns }}/auth/userpass/users/noor"
+    ca_path: "{{ vid_ca }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ people_token }}"
+    body_format: json
+    body:
+      token_ttl: "{{ people_token_ttl | int }}"
+      token_max_ttl: "{{ people_token_max_ttl | int }}"
+    status_code: [204]
+  when: >-
+    people_noor.status == 200 and (people_noor.json.data.token_ttl != (people_token_ttl | int)
+    or people_noor.json.data.token_max_ttl != (people_token_max_ttl | int))
+  changed_when: true
+  no_log: true
+
+# ── The workload: AppRole role id and secret id ───────────────────────────────
+- name: Read the AppRole role id
+  ansible.builtin.uri:
+    url: "{{ people_ns }}/auth/approle/role/payments-batch/role-id"
+    ca_path: "{{ vid_ca }}"
+    headers:
+      X-Vault-Token: "{{ people_token }}"
+  register: people_role_id
+  check_mode: false
+
+- name: Look up the stored secret id
+  ansible.builtin.uri:
+    url: "{{ people_ns }}/auth/approle/role/payments-batch/secret-id/lookup"
+    ca_path: "{{ vid_ca }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ people_token }}"
+    body_format: json
+    body:
+      secret_id: "{{ lookup('ansible.builtin.file', people_approle_dir + '/secret_id', errors='ignore') | default('none', true) }}"
+    status_code: [200, 204, 400, 404]
+  register: people_sid_lookup
+  check_mode: false
+  no_log: true
+
+- name: Mint a secret id with the workload's metadata
+  ansible.builtin.uri:
+    url: "{{ people_ns }}/auth/approle/role/payments-batch/secret-id"
+    ca_path: "{{ vid_ca }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ people_token }}"
+    body_format: json
+    body:
+      metadata: "{{ people_approle_metadata }}"
+    status_code: [200]
+  when: people_sid_lookup.status != 200 or (people_sid_lookup.json.data | default(none)) is none
+  register: people_sid_new
+  changed_when: true
+  no_log: true
+
+- name: Look up the console token
+  ansible.builtin.uri:
+    url: "{{ people_ns }}/auth/token/lookup"
+    ca_path: "{{ vid_ca }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ people_token }}"
+    body_format: json
+    body:
+      token: "{{ lookup('ansible.builtin.file', vid_tokens_dir + '/console', errors='ignore') | default('none', true) }}"
+    status_code: [200, 400, 403]
+  register: people_console_lookup
+  check_mode: false
+  no_log: true
+
+- name: Mint the console token (periodic, 24h; the API renews it)
+  ansible.builtin.uri:
+    url: "{{ people_ns }}/auth/token/create/obs-console"
+    ca_path: "{{ vid_ca }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ people_token }}"
+    body_format: json
+    body:
+      policies: [obs-console]
+      display_name: observatory-console
+    status_code: [200]
+  when: people_console_lookup.status != 200
+  register: people_console_new
+  changed_when: true
+  no_log: true
+
+# Truncate and write the same inode (the API mounts these files); the value
+# arrives on stdin, never argv. The role id is written only when it differs.
+- name: Write each new credential in place (0600)
+  ansible.builtin.command:
+    argv: [sh, -c, 'umask 077; touch "$1"; chmod 600 "$1"; cat >"$1"', sh, "{{ item.file }}"]
+    stdin: "{{ item.value }}"
+    stdin_add_newline: false
+  loop:
+    - file: "{{ people_approle_dir }}/role_id"
+      value: >-
+        {{ people_role_id.json.data.role_id
+           if people_role_id.json.data.role_id != (lookup('ansible.builtin.file', people_approle_dir + '/role_id', errors='ignore') | default('', true))
+           else '' }}
+    - { file: "{{ people_approle_dir }}/secret_id", value: "{{ people_sid_new.json.data.secret_id | default('') }}" }
+    - { file: "{{ vid_tokens_dir }}/console", value: "{{ people_console_new.json.auth.client_token | default('') }}" }
+  loop_control:
+    label: "{{ item.file | basename }}"
+  when: item.value | trim | length > 0
+  changed_when: true
+  no_log: true

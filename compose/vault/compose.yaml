@@ -1,0 +1,107 @@
+# compose/vault/compose.yaml: vault-1, vault-2, vault-3, one Raft cluster.
+#
+# Each node auto-unseals through vault-s with its OWN seal token, mounted from
+# .secrets/vault/seal/vault-N (Ansible phase seal-tokens writes it in place;
+# make seal-token-rotate replaces one). There is no VAULT_TOKEN env var here.
+# Start order is make's job (make vault-up): vault-s must be unsealed first.
+
+x-vault: &vault
+  image: ${VAULT_ENT_IMAGE}
+  user: "100:1000"
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  entrypoint: ["/bin/sh", "/vid/vault-server.sh"]
+  restart: unless-stopped
+  mem_limit: 1g
+  networks: [default]
+  healthcheck:
+    # "The process answers": 200 active, 429 standby, 473 perf standby,
+    # 503 sealed, 501 uninitialized. Readiness is vault-status's job.
+    test: ["CMD-SHELL", "S=$$(wget -S -qO/dev/null --no-check-certificate 'https://127.0.0.1:8200/v1/sys/health' 2>&1 | awk '/^ *HTTP\\//{print $$2; exit}'); [ -n \"$$S\" ]"]
+    interval: 10s
+    timeout: 5s
+    retries: 15
+    start_period: 20s
+
+services:
+  vault-1:
+    <<: *vault
+    container_name: vid-vault_1
+    hostname: vault-1
+    environment:
+      VAULT_ADDR: https://127.0.0.1:8200
+      VAULT_CACERT: /vault/config/tls/ca-chain.pem
+      VAULT_LICENSE_PATH: /vault/config/vault.hclic
+    ports: ["127.0.0.1:${VID_PORT_VAULT_1}:8200"]
+    volumes:
+      - vault-1-data:/vault/file       # persistent: Raft data
+      - vault-1-audit:/vault/audit     # persistent: audit log
+      - ../../vault/vault-1/config.hcl:/vault/config/config.hcl:ro
+      - ../../vault-tls:/vault/config/tls:ro
+      - ../../scripts/vault-server.sh:/vid/vault-server.sh:ro
+      - ../../.secrets/vault/vault.hclic:/vault/config/vault.hclic:ro
+      - ../../.secrets/vault/seal/vault-1:/run/secrets/transit-token:ro
+
+  vault-2:
+    <<: *vault
+    container_name: vid-vault_2
+    hostname: vault-2
+    environment:
+      VAULT_ADDR: https://127.0.0.1:8200
+      VAULT_CACERT: /vault/config/tls/ca-chain.pem
+      VAULT_LICENSE_PATH: /vault/config/vault.hclic
+    ports: ["127.0.0.1:${VID_PORT_VAULT_2}:8200"]
+    volumes:
+      - vault-2-data:/vault/file       # persistent: Raft data
+      - vault-2-audit:/vault/audit     # persistent: audit log
+      - ../../vault/vault-2/config.hcl:/vault/config/config.hcl:ro
+      - ../../vault-tls:/vault/config/tls:ro
+      - ../../scripts/vault-server.sh:/vid/vault-server.sh:ro
+      - ../../.secrets/vault/vault.hclic:/vault/config/vault.hclic:ro
+      - ../../.secrets/vault/seal/vault-2:/run/secrets/transit-token:ro
+
+  vault-3:
+    <<: *vault
+    container_name: vid-vault_3
+    hostname: vault-3
+    environment:
+      VAULT_ADDR: https://127.0.0.1:8200
+      VAULT_CACERT: /vault/config/tls/ca-chain.pem
+      VAULT_LICENSE_PATH: /vault/config/vault.hclic
+    ports: ["127.0.0.1:${VID_PORT_VAULT_3}:8200"]
+    volumes:
+      - vault-3-data:/vault/file       # persistent: Raft data
+      - vault-3-audit:/vault/audit     # persistent: audit log
+      - ../../vault/vault-3/config.hcl:/vault/config/config.hcl:ro
+      - ../../vault-tls:/vault/config/tls:ro
+      - ../../scripts/vault-server.sh:/vid/vault-server.sh:ro
+      - ../../.secrets/vault/vault.hclic:/vault/config/vault.hclic:ro
+      - ../../.secrets/vault/seal/vault-3:/run/secrets/transit-token:ro
+
+networks:
+  default:
+    name: vid-internal
+    external: true
+
+volumes:
+  vault-1-data:
+    labels: { io.vid.data: "true" }
+  vault-1-audit:
+    labels: { io.vid.data: "true" }
+    # The image has no /vault/audit: without this the volume is root-owned
+    # and uid 100 cannot open its audit log (found by make probe).
+    driver_opts: { o: "uid=100,gid=1000" }
+  vault-2-data:
+    labels: { io.vid.data: "true" }
+  vault-2-audit:
+    labels: { io.vid.data: "true" }
+    # The image has no /vault/audit: without this the volume is root-owned
+    # and uid 100 cannot open its audit log (found by make probe).
+    driver_opts: { o: "uid=100,gid=1000" }
+  vault-3-data:
+    labels: { io.vid.data: "true" }
+  vault-3-audit:
+    labels: { io.vid.data: "true" }
+    # The image has no /vault/audit: without this the volume is root-owned
+    # and uid 100 cannot open its audit log (found by make probe).
+    driver_opts: { o: "uid=100,gid=1000" }

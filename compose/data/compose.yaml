@@ -1,0 +1,86 @@
+# compose/data/compose.yaml: PostgreSQL, the target system (D13). Nothing is
+# published on the host: Vault and the API reach it inside vid-internal.
+#
+# Local (socket) connections use peer auth: only `podman exec -u postgres`
+# reaches the superuser without a password (Ansible's schema phase). Network
+# connections need scram. The bootstrap password is handed to Vault once
+# (Terraform, password_wo) and then rotated away (Ansible data, D8).
+#
+# Connection evidence (D13): connections and disconnections are logged as
+# jsonlog into the pg-log volume, which the API mounts read-only. No statement
+# logging: CREATE ROLE ... PASSWORD would land in the log.
+
+services:
+  postgres:
+    image: ${POSTGRES_IMAGE}
+    container_name: vid-postgres
+    hostname: postgres
+    # Postgres creates a missing log_directory 0700, and the API (uid 1000)
+    # must read it: the entrypoint, still root, prepares the volume root 0755
+    # for uid 70 (postgres) before the image's own entrypoint drops privileges.
+    entrypoint:
+      - sh
+      - -c
+      - chown 70:70 /var/log/postgresql && chmod 0755 /var/log/postgresql && exec docker-entrypoint.sh "$$@"
+      - --
+    environment:
+      POSTGRES_DB: finance
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg-bootstrap
+      POSTGRES_INITDB_ARGS: "--auth-local=peer --auth-host=scram-sha-256"
+    command:
+      - postgres
+      - -c
+      - logging_collector=on
+      - -c
+      - log_destination=jsonlog
+      - -c
+      - log_directory=/var/log/postgresql
+      - -c
+      - log_filename=postgresql.log
+      - -c
+      - log_file_mode=0644
+      - -c
+      - log_rotation_age=0
+      - -c
+      - log_rotation_size=0
+      - -c
+      - log_connections=on
+      - -c
+      - log_disconnections=on
+      - -c
+      - log_statement=none
+    # The entrypoint starts as root, fixes ownership, then drops to postgres.
+    cap_drop: [ALL]
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
+    security_opt: ["no-new-privileges:true"]
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      - pg-log:/var/log/postgresql
+      - ../../.secrets/data/pg-bootstrap:/run/secrets/pg-bootstrap:ro
+    networks:
+      default:
+        aliases: [postgres]
+    restart: unless-stopped
+    mem_limit: 512m
+    healthcheck:
+      # As the postgres OS user over the local socket (peer auth): the jsonlog
+      # shows these as user postgres from [local], which the API ignores.
+      test: ["CMD-SHELL", "gosu postgres pg_isready -U postgres -d finance"]
+      interval: 15s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+networks:
+  default:
+    name: vid-internal
+    external: true
+
+volumes:
+  pg-data:
+    name: vid-pg_data
+    labels: { io.vid.data: "true" }
+  pg-log:
+    name: vid-pg_log
+    labels: { io.vid.data: "true" }

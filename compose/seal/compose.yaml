@@ -1,0 +1,52 @@
+# compose/seal/compose.yaml: vault-s, the Transit auto-unseal provider.
+#
+# Vault Enterprise, single-node Raft, Shamir seal (1-of-1). vault-1..3 unseal
+# through its `autounseal` Transit key, each with its own seal token. Cold
+# start order is make's job (make vault-up): vault-s must be unsealed first.
+
+services:
+  vault-s:
+    image: ${VAULT_ENT_IMAGE}
+    container_name: vid-vault_s
+    hostname: vault-s
+    user: "100:1000"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      VAULT_ADDR: https://127.0.0.1:8200
+      VAULT_CACERT: /vault/config/tls/ca-chain.pem
+      # The licence is a read-only file, never an environment variable.
+      VAULT_LICENSE_PATH: /vault/config/vault.hclic
+    entrypoint: ["/bin/sh", "/vid/vault-server.sh"]
+    ports: ["127.0.0.1:${VID_PORT_VAULT_S}:8200"]
+    volumes:
+      - vault-s-data:/vault/file        # persistent: Raft data + Transit key
+      - vault-s-audit:/vault/audit      # persistent: audit log
+      - ../../vault/vault-s/config.hcl:/vault/config/config.hcl:ro
+      - ../../vault-tls:/vault/config/tls:ro
+      - ../../scripts/vault-server.sh:/vid/vault-server.sh:ro
+      - ../../.secrets/vault/vault.hclic:/vault/config/vault.hclic:ro
+    restart: unless-stopped
+    mem_limit: 512m
+    networks: [default]
+    healthcheck:
+      # "The process answers": any HTTP status, sealed and uninitialized too.
+      test: ["CMD-SHELL", "S=$$(wget -S -qO/dev/null --no-check-certificate 'https://127.0.0.1:8200/v1/sys/health' 2>&1 | awk '/^ *HTTP\\//{print $$2; exit}'); [ -n \"$$S\" ]"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 10s
+
+networks:
+  default:
+    name: vid-internal
+    external: true
+
+volumes:
+  vault-s-data:
+    labels: { io.vid.data: "true" }
+  vault-s-audit:
+    labels: { io.vid.data: "true" }
+    # The image has no /vault/audit: without this the volume is root-owned
+    # and uid 100 cannot open its audit log (found by make probe).
+    driver_opts: { o: "uid=100,gid=1000" }

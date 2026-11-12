@@ -1,0 +1,9 @@
+# Phase 11 (ansible stage): the two KV values (synthetic, written once, never
+# read back) and their custom_metadata labels from config/cases.json (D8).
+- name: The stage
+  hosts: localhost
+  gather_facts: false
+  vars:
+    stage_cases: "{{ lookup('ansible.builtin.file', vid_root + '/config/cases.json') | from_json }}"
+  roles:
+    - stage

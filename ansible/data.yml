@@ -1,0 +1,9 @@
+# Phase 9 (ansible data): rotate the database root password away, so only
+# Vault knows it (D8, as vault_pipeline), then the finance schema and its
+# synthetic rows. The schema goes through the local socket as the postgres OS
+# user (peer auth): no password is used or kept for it.
+- name: The database
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - data

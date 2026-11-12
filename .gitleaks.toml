@@ -1,0 +1,15 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "global allowlist"
+paths = [
+  "CHANGELOG.md",
+  ".gitleaks.toml",
+]
+# The database connection names its SCRAM method, not a password
+# (terraform/vault-platform/mounts.tf); the password itself is write-only.
+regexTarget = "line"
+regexes = [
+  '''password_authentication\s*=\s*"scram-sha-256"''',
+]

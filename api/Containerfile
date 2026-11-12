@@ -1,0 +1,21 @@
+ARG NODE_IMAGE=docker.io/library/node:24-alpine
+FROM ${NODE_IMAGE}
+
+ENV NODE_ENV=production
+WORKDIR /app
+# One dependency, pg (D17), pinned by package-lock.json.
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
+COPY server.js ./
+COPY lib ./lib
+COPY scripts ./scripts
+# config/cases.json without the KV values (scripts/app-build.sh strips them).
+COPY config ./config
+
+# uid 1000, gid 1000: reads the mounted credentials and the audit logs (0640).
+USER 1000:1000
+EXPOSE 3000
+HEALTHCHECK --interval=10s --timeout=4s --retries=6 --start-period=10s \
+  CMD node -e "fetch('http://127.0.0.1:3000/api/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+# node:sqlite is still marked experimental in Node 24; the warning is noise.
+CMD ["node", "--disable-warning=ExperimentalWarning", "server.js"]

@@ -1,0 +1,4 @@
+data_ns: "{{ vid_cluster_addr }}/v1/{{ vid_namespace }}"
+data_token: "{{ lookup('ansible.builtin.file', vid_tokens_dir + '/ansible-platform') }}"
+# Written after a successful rotate-root; the bootstrap password is dead from then on.
+data_rotated_marker: "{{ vid_root }}/.secrets/data/rotated"

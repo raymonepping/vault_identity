@@ -1,0 +1,8 @@
+people_ns: "{{ vid_cluster_addr }}/v1/{{ vid_namespace }}"
+people_token: "{{ lookup('ansible.builtin.file', vid_tokens_dir + '/ansible-platform') }}"
+# Noor's token lives as long as the console session may idle (D11).
+people_token_ttl: "{{ vid_session_idle }}"
+people_token_max_ttl: "{{ vid_session_idle | int * 2 }}"
+people_approle_dir: "{{ vid_root }}/.secrets/approle/payments-batch"
+# Secret id metadata lands in the workload token's metadata (01: token metadata layer).
+people_approle_metadata: '{"application":"payments-batch","team":"payments","environment":"lab"}'

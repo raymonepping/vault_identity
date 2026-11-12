@@ -1,0 +1,2 @@
+stage_ns: "{{ vid_cluster_addr }}/v1/{{ vid_namespace }}"
+stage_token: "{{ lookup('ansible.builtin.file', vid_tokens_dir + '/ansible-platform') }}"

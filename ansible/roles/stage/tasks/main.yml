@@ -1,0 +1,54 @@
+# stage: idempotent; a second run reports changed=0. The values are written
+# once (their metadata says whether a version exists), never read.
+
+- name: The KV secrets of config/cases.json
+  ansible.builtin.set_fact:
+    stage_kv: "{{ stage_cases.secrets | dict2items | selectattr('value.kind', 'eq', 'kv_v2') | list }}"
+
+- name: Read each secret's metadata
+  ansible.builtin.uri:
+    url: "{{ stage_ns }}/kv/metadata/{{ item.value.path | regex_replace('^kv/data/', '') }}"
+    ca_path: "{{ vid_ca }}"
+    headers:
+      X-Vault-Token: "{{ stage_token }}"
+    status_code: [200, 404]
+  loop: "{{ stage_kv }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: stage_meta
+  check_mode: false
+
+- name: Write the value once
+  ansible.builtin.uri:
+    url: "{{ stage_ns }}/{{ item.item.value.path }}"
+    ca_path: "{{ vid_ca }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ stage_token }}"
+    body_format: json
+    body:
+      data: "{{ item.item.value.value }}"
+    status_code: [200]
+  loop: "{{ stage_meta.results }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+  when: item.status == 404 or (item.json.data.current_version | default(0)) == 0
+  changed_when: true
+  no_log: true
+
+- name: Keep the labels (custom_metadata)
+  ansible.builtin.uri:
+    url: "{{ stage_ns }}/kv/metadata/{{ item.item.value.path | regex_replace('^kv/data/', '') }}"
+    ca_path: "{{ vid_ca }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ stage_token }}"
+    body_format: json
+    body:
+      custom_metadata: "{{ item.item.value.labels }}"
+    status_code: [204]
+  loop: "{{ stage_meta.results }}"
+  loop_control:
+    label: "{{ item.item.key }}"
+  when: (item.json.data.custom_metadata | default({}, true)) != item.item.value.labels
+  changed_when: true

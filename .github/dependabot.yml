@@ -1,6 +1,14 @@
 version: 2
 updates:
-  - package-ecosystem: "terraform"
+  - package-ecosystem: "github-actions"
     directory: "/"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "terraform"
+    directories: ["/terraform/vault-seal", "/terraform/vault-platform"]
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "npm"
+    directories: ["/api", "/web", "/e2e"]
     schedule:
       interval: "weekly"

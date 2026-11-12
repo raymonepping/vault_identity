@@ -1,0 +1,69 @@
+# seal_tokens: one periodic orphan seal token per cluster node, minted from
+# the token role autounseal that Terraform declared (D5), with ansible-seal.
+# A token is reissued only when vault-s no longer accepts it. Files are
+# written IN PLACE (gotcha 4: a single-file bind mount keeps the old inode
+# after a rename), and a node whose token changed is listed in
+# .build/seal-restart so make vault-up restarts it.
+- name: Ensure the seal token directory
+  ansible.builtin.file:
+    path: "{{ vid_state_dir }}/seal"
+    state: directory
+    mode: "0700"
+
+- name: Does vault-s still accept each node's token?
+  ansible.builtin.uri:
+    url: "{{ vid_seal_addr }}/v1/auth/token/lookup"
+    ca_path: "{{ vid_ca }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ lookup('ansible.builtin.file', vid_tokens_dir + '/ansible-seal') }}"
+    body_format: json
+    body:
+      token: "{{ lookup('ansible.builtin.file', vid_state_dir + '/seal/' + item, errors='ignore') | default('none', true) }}"
+    status_code: [200, 400, 403]
+  loop: "{{ seal_tokens_nodes }}"
+  register: seal_tokens_lookup
+  check_mode: false  # a read; check mode must see the real state
+  no_log: true
+
+- name: Mint a token for each node vault-s does not accept
+  ansible.builtin.uri:
+    url: "{{ vid_seal_addr }}/v1/auth/token/create/autounseal"
+    ca_path: "{{ vid_ca }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ lookup('ansible.builtin.file', vid_tokens_dir + '/ansible-seal') }}"
+    body_format: json
+    body:
+      display_name: "vid-seal-{{ item.item }}"
+      meta:
+        node: "{{ item.item }}"
+  loop: "{{ seal_tokens_lookup.results }}"
+  loop_control:
+    label: "{{ item.item }}"
+  when: item.status != 200
+  register: seal_tokens_minted
+  changed_when: true
+  no_log: true
+
+# Truncate and write the same inode; the token arrives on stdin, never argv.
+- name: Write each new token in place (0600)
+  ansible.builtin.command:
+    argv: [sh, -c, 'umask 077; touch "$1"; chmod 600 "$1"; cat >"$1"', sh, "{{ vid_state_dir }}/seal/{{ item.item.item }}"]
+    stdin: "{{ item.json.auth.client_token }}"
+    stdin_add_newline: false
+  loop: "{{ seal_tokens_minted.results | selectattr('json', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.item.item }}"
+  changed_when: true
+  no_log: true
+
+- name: List the nodes that must restart to read their new token
+  ansible.builtin.lineinfile:
+    path: "{{ vid_root }}/.build/seal-restart"
+    line: "{{ item.item.item }}"
+    create: true
+    mode: "0644"
+  loop: "{{ seal_tokens_minted.results | selectattr('json', 'defined') | list }}"
+  loop_control:
+    label: "{{ item.item.item }}"

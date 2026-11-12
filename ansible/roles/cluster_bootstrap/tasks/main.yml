@@ -1,0 +1,35 @@
+# cluster_bootstrap: after vault_init initialised vault-1, wait for vault-2
+# and vault-3 to join through retry_join and unseal through Transit, then for
+# three Raft voters (autopilot promotes a new node after it is stable).
+- name: Wait for every node to be unsealed (joined and auto-unsealed)
+  ansible.builtin.uri:
+    url: "{{ item.value }}/v1/sys/health"
+    ca_path: "{{ vid_ca }}"
+    status_code: [200, 429, 473, 501, 503]
+  loop: "{{ vid_node_addrs | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: cluster_bootstrap_health
+  check_mode: false  # a read; check mode must see the real state
+  retries: 60
+  delay: 3
+  until: cluster_bootstrap_health.status in [200, 429, 473]
+
+- name: Wait for three Raft voters
+  ansible.builtin.uri:
+    url: "{{ vid_cluster_addr }}/v1/sys/storage/raft/configuration"
+    ca_path: "{{ vid_ca }}"
+    headers:
+      X-Vault-Token: "{{ lookup('ansible.builtin.file', vid_tokens_dir + '/ansible-platform') }}"
+  register: cluster_bootstrap_raft
+  check_mode: false  # a read; check mode must see the real state
+  retries: 60
+  delay: 3
+  until: (cluster_bootstrap_raft.json.data.config.servers | selectattr('voter') | list | length) == 3
+  no_log: true
+
+- name: Report the voters
+  ansible.builtin.debug:
+    msg: >-
+      {{ cluster_bootstrap_raft.json.data.config.servers | map(attribute='node_id') | join(', ') }} are voters;
+      leader {{ cluster_bootstrap_raft.json.data.config.servers | selectattr('leader') | map(attribute='node_id') | first }}

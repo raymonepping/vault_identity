@@ -1,0 +1,34 @@
+# data: idempotent; a second run reports changed=0.
+
+- name: Has Vault already rotated the bootstrap password away?
+  ansible.builtin.stat:
+    path: "{{ data_rotated_marker }}"
+  register: data_rotated
+
+- name: Rotate the connection's root password (Vault alone knows it afterwards)
+  ansible.builtin.uri:
+    url: "{{ data_ns }}/database/rotate-root/finance"
+    ca_path: "{{ vid_ca }}"
+    method: POST
+    headers:
+      X-Vault-Token: "{{ data_token }}"
+    status_code: [200, 204]
+  when: not data_rotated.stat.exists
+  changed_when: true
+  no_log: true
+
+- name: Mark the rotation
+  ansible.builtin.copy:
+    dest: "{{ data_rotated_marker }}"
+    content: "rotated by ansible data; .secrets/data/pg-bootstrap no longer works\n"
+    mode: "0600"
+  when: not data_rotated.stat.exists
+
+# The schema, as the postgres OS user over the local socket. The last
+# statement prints how many rows it inserted (0 on a second run).
+- name: The finance schema and its synthetic rows
+  ansible.builtin.command:
+    argv: [podman, exec, -i, -u, postgres, vid-postgres, psql, -d, finance, -v, ON_ERROR_STOP=1, -Atq]
+    stdin: "{{ lookup('ansible.builtin.file', vid_root + '/ansible/roles/data/files/schema.sql') }}"
+  register: data_schema
+  changed_when: data_schema.stdout_lines | last != '0'

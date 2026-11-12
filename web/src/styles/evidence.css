@@ -1,0 +1,123 @@
+/* evidence.css: the Identity Observatory's own pieces on top of Vault
+ * daylight glass (vault-glass.css, shell.css, app.css). Every colour is a
+ * token. See DESIGN.md.
+ *
+ * Evidence states (input/03.md) on the system's pills; text on its own tint
+ * is AA:
+ *   Confirmed   healthy  (green)   a direct, tested join
+ *   Correlated  approved (blue)    a stable identifier matches
+ *   Partial     pending  (amber)   a link is missing or still in its window
+ *   Unmatched   rejected (red)     the window passed, no match
+ *   Unknown     manual   (grey)    the source could not be read
+ */
+
+/* ── Hero ─────────────────────────────────────────────────── */
+.obs-hero { display: flex; flex-direction: column; gap: 6px; }
+.obs-hero__kicker { font-size: 12.5px; font-weight: 600; color: var(--vg-text-muted); margin: 0; }
+.obs-hero .hero-title { max-width: 980px; }
+.obs-hero .hero-tiles { margin: 12px 0 0; }
+.obs-hero .hero-tiles dd { margin: 0; }
+
+/* ── Lanes: who initiated, who acted, what was touched ────── */
+.lanes { list-style: none; margin: 14px 0 0; padding: 0; display: flex; align-items: stretch; gap: 10px; flex-wrap: wrap; }
+.lane {
+  display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1 1 200px;
+  padding: 10px 14px; border-radius: 12px; background: var(--vg-hover); border: 1px solid var(--vg-glass-border);
+}
+.lane__role { font-size: 12px; color: var(--vg-text-muted); }
+.lane__name { display: inline-flex; align-items: center; gap: 6px; font-size: 15px; color: var(--vg-text-primary); }
+.lane .mono { font-size: 11px; color: var(--vg-text-muted); }
+.lane__arrow { display: flex; align-items: center; color: var(--vg-text-muted); }
+
+/* ── The chain: the console's signature element ───────────── */
+.chain { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 22px; }
+.chain__link {
+  position: relative; display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border-radius: 12px;
+  background: var(--vg-bg-elevated); border: 1px solid var(--vg-border-subtle);
+  box-shadow: var(--vg-shadow-sm), inset 0 1px 0 var(--vg-glass-hi);
+}
+/* The join to the previous link: its line style says how strong it is. */
+.chain__link + .chain__link::before {
+  content: ""; position: absolute; top: 26px; left: -22px; width: 22px; border-top: 2px solid var(--vg-healthy);
+}
+.chain__link.chain__link--correlated::before { border-top: 2px dashed var(--vg-action-primary); }
+.chain__link.chain__link--partial::before { border-top: 2px dotted var(--vg-pending); }
+.chain__link.chain__link--unmatched::before { border-top: 2px dashed var(--vg-critical); width: 8px; }
+.chain__link.chain__link--unknown::before { border-top: 2px dotted var(--vg-text-dim); }
+.chain__link.chain__link--na::before { border-top-color: transparent; }
+.chain__link--unmatched { background: color-mix(in srgb, var(--vg-hue-red) 5%, var(--vg-bg-elevated)); }
+.chain__link--partial { background: color-mix(in srgb, var(--vg-hue-amber) 5%, var(--vg-bg-elevated)); }
+.chain__link--na { background: var(--vg-well); box-shadow: none; }
+.chain__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.chain__name { font-weight: 700; font-size: 14px; }
+.chain__detail { font-size: 12.5px; color: var(--vg-text-secondary); overflow-wrap: anywhere; }
+.chain__meta { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--vg-text-muted); margin-top: auto; }
+.state-na { font-size: 12px; color: var(--vg-text-dim); }
+.legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: 12px; color: var(--vg-text-muted); }
+.legend li { display: inline-flex; align-items: center; gap: 6px; }
+
+/* ── Chips and labels ─────────────────────────────────────── */
+.flow-chip, .source-chip {
+  display: inline-flex; align-items: center; gap: 5px; font-size: 11.5px; font-weight: 600; white-space: nowrap;
+  padding: 2px 9px; border-radius: 100px; background: var(--vg-bg-surface); border: 1px solid var(--vg-border-strong); color: var(--vg-text-secondary);
+}
+.source-chip__label { font-weight: 500; color: var(--vg-text-muted); }
+.source-chip__label::before { content: "/"; margin: 0 4px 0 1px; color: var(--vg-text-dim); }
+.label { font-size: 11px; font-weight: 600; color: var(--vg-governance); padding: 1px 7px; border-radius: 100px; background: color-mix(in srgb, var(--vg-hue-amber) 12%, transparent); }
+.look { font-size: 12px; font-weight: 700; }
+.look--denied, .look--unmatched, .look--query-refused, .look--login-refused { color: var(--vg-critical); }
+.look--outside-the-console { color: var(--vg-governance); }
+
+/* ── Cases ────────────────────────────────────────────────── */
+.case-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.case { display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 2px; border-top: 1px solid var(--vg-border-subtle); }
+.case__num { font-size: 20px; font-weight: 750; color: var(--vg-text-muted); text-align: right; }
+.case__body { display: flex; flex-direction: column; gap: 3px; min-width: 0; font-size: 13.5px; }
+.case__last { font-size: 12px; font-weight: 600; color: var(--vg-action-bright); }
+
+/* ── Investigation ────────────────────────────────────────── */
+.sub-h { font-size: 13px; font-weight: 700; margin: 4px 0 0; color: var(--vg-text-secondary); }
+.facts .mono { margin-right: 6px; }
+.facts__row { display: contents; }
+.policy-list { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: flex-start; }
+.policy summary { cursor: pointer; }
+.policy[open] { flex-basis: 100%; }
+.story { list-style: none; margin: 0; padding: 0; counter-reset: step; display: flex; flex-direction: column; }
+.story li {
+  counter-increment: step; display: grid; grid-template-columns: 28px 76px minmax(0, 1fr); gap: 8px; align-items: baseline;
+  padding: 8px 2px; border-bottom: 1px solid var(--vg-border-subtle); font-size: 13px;
+}
+.story li::before { content: counter(step); font-weight: 700; color: var(--vg-text-muted); text-align: right; }
+.story li:last-child { border-bottom: none; }
+.story .when, .timeline .when { font-family: var(--font-mono); font-size: 11.5px; color: var(--vg-text-muted); }
+.story .what { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; min-width: 0; }
+.link-button {
+  background: none; border: none; padding: 0; font: inherit; color: var(--vg-text-primary); text-align: left; cursor: pointer;
+  text-decoration: underline; text-decoration-color: var(--vg-border-strong); text-underline-offset: 3px;
+}
+.link-button:hover, .link-button:focus-visible { text-decoration-color: var(--vg-action-primary); }
+.plain-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.said-steps { margin: 6px 0 0; padding-left: 18px; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+.said-error { display: block; color: var(--vg-critical); }
+.timeline li { grid-template-columns: 76px max-content minmax(0, 1fr); }
+
+/* ── Responsive ───────────────────────────────────────────── */
+@media (max-width: 1180px) {
+  .chain { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .chain__link + .chain__link::before { display: none; }
+}
+@media (max-width: 640px) {
+  .chain { grid-template-columns: 1fr; gap: 10px; }
+  .lane__arrow { display: none; }
+  .case { grid-template-columns: 26px minmax(0, 1fr); }
+  .case .primary-button { grid-column: 2; justify-self: start; }
+  .story li { grid-template-columns: 22px minmax(0, 1fr); }
+  .story li .when { grid-column: 2; }
+  .story li .what { grid-column: 2; }
+  .timeline li { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { .chain__link { transition: none; } }
+
+/* A warning (amber): something happened after it should have stopped. */
+.inline-notice.warn { background: var(--vg-pending-bg); color: var(--vg-pending); border-color: color-mix(in srgb, var(--vg-hue-amber) 30%, transparent); }
+.inline-notice.warn .mono { color: inherit; }
