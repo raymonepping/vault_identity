@@ -48,7 +48,7 @@ const pgTs = (iso) => iso.replace('T', ' ').replace('Z', ' UTC');
 export const pgConnect = {
   timestamp: pgTs('2026-11-12T08:00:01.000Z'), user: USER, dbname: 'finance', pid: 77, remote_host: '10.89.27.160',
   session_id: '6af56618.db', line_num: 2, error_severity: 'LOG',
-  message: `connection authorized: user=${USER} database=finance application_name=finance-agent:0a1b2c3d`,
+  message: `connection authorized: user=${USER} database=finance application_name=finance-agent:0a1b2c3d SSL enabled (protocol=TLSv1.3, cipher=TLS_AES_256_GCM_SHA384, bits=256)`,
 };
 export const pgDisconnect = {
   timestamp: pgTs('2026-11-12T08:00:02.500Z'), user: USER, dbname: 'finance', session_id: '6af56618.db', line_num: 4,

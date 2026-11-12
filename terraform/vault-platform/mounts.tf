@@ -25,7 +25,8 @@ resource "vault_database_secret_backend_connection" "finance" {
   name          = "finance"
   allowed_roles = ["finance-readonly"]
   postgresql {
-    connection_url          = "postgresql://{{username}}:{{password}}@postgres:5432/finance?sslmode=disable"
+    # TLS, verified against the lab CA (the certificate names postgres).
+    connection_url          = "postgresql://{{username}}:{{password}}@postgres:5432/finance?sslmode=verify-full&sslrootcert=/vault/config/tls/ca-chain.pem"
     username                = "postgres"
     password_wo             = var.pg_bootstrap_password
     password_wo_version     = var.pg_password_version

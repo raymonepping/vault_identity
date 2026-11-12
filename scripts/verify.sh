@@ -125,13 +125,16 @@ section_data() {
   check "the finance ledger has its synthetic rows" bash -c "test \"\$(podman exec -u postgres vid-postgres psql -d finance -Atc 'select count(*) from ledger_entries')\" -ge 6"
   check "Vault rotated the bootstrap password away (it no longer logs in)" bash -c "! podman exec -i vid-postgres sh -c 'IFS= read -r PGPASSWORD; export PGPASSWORD; psql \"host=postgres dbname=finance user=postgres\" -Atc \"select 1\"' <.secrets/data/pg-bootstrap >/dev/null 2>&1"
   check "connections are logged as jsonlog, readable by the API" podman exec vid-api test -r /pglog/postgresql.json
+  check "TLS 1.3 on, with the lab certificate" bash -c "test \"\$(podman exec -u postgres vid-postgres psql -d finance -Atc 'show ssl')\" = on"
+  check "a network connection without TLS is refused (pg_hba)" bash -c "podman exec vid-postgres psql 'host=postgres sslmode=disable dbname=finance user=postgres' -c 'select 1' 2>&1 | grep -F 'no encryption' >/dev/null"
   check "no statement logging (CREATE ROLE would carry a password)" bash -c "test \"\$(podman exec -u postgres vid-postgres psql -d finance -Atc 'show log_statement')\" = none"
 }
 
 section_app() {
   echo "app"
   check "vid-api healthy" healthy vid-api
-  check "API healthz answers from the store" bash -c "curl -sf http://127.0.0.1:$(vid_conf VID_PORT_API)/api/healthz | jq -e '.ok' >/dev/null"
+  check "API healthz answers from the store (through the console)" bash -c "curl -sf --cacert vault-tls/ca-chain.pem https://localhost:$(vid_conf VID_PORT_WEB)/api/healthz | jq -e '.ok' >/dev/null"
+  check "the API is not published on its own (only through the console's TLS)" bash -c "test -z \"\$(podman port vid-api)\""
   check "API image is native arm64" native "$(vid_conf VID_IMAGE_PREFIX)/api:$(vid_conf VID_IMAGE_TAG)"
   local n
   for n in 1 2 3; do

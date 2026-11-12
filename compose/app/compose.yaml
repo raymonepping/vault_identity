@@ -59,9 +59,8 @@ services:
       EVIDENCE_DB: /data/evidence.db
       CASES_FILE: /app/config/cases.json
       SESSION_IDLE_SECONDS: "${VID_SESSION_IDLE}"
-      CONSOLE_URL: https://localhost:${VID_PORT_WEB}
+      CONSOLE_URL: https://localhost:${VID_PORT_WEB},https://127.0.0.1:${VID_PORT_WEB}
       NODE_EXTRA_CA_CERTS: /etc/vid/ca-chain.pem
-    ports: ["127.0.0.1:${VID_PORT_API}:3000"]
     volumes:
       - ../../vault-tls/ca-chain.pem:/etc/vid/ca-chain.pem:ro
       - ../../.secrets/vault/tokens/console:/run/secrets/vault/console:ro      # D14

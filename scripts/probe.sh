@@ -114,7 +114,7 @@ api "$T" POST "$NS/sys/mounts/database" '{"type":"database"}'
 api "$T" POST "$NS/sys/mounts/database/tune" '{"audit_non_hmac_response_keys":["username"]}'
 row P3 Q6 "tune database audit_non_hmac_response_keys=[username]" "204" "HTTP $ST${ERR:+: $ERR}" "$(yes_if '[ "$ST" = 204 ]')"
 api "$T" POST "$NS/database/config/pg" "$(jq -n --arg u "$PGADMIN" --rawfile p "$WORK/pgadmin.pw" '{plugin_name: "postgresql-database-plugin",
-  connection_url: "postgresql://{{username}}:{{password}}@postgres:5432/finance?sslmode=disable", username: $u,
+  connection_url: "postgresql://{{username}}:{{password}}@postgres:5432/finance?sslmode=verify-full&sslrootcert=/vault/config/tls/ca-chain.pem", username: $u,
   password: ($p | rtrimstr("\n")), allowed_roles: ["ro", "ro-short", "ro-keep"], password_authentication: "scram-sha-256"}')"
 row P3 setup "database/config/pg (verify_connection)" "200 or 204" "HTTP $ST${ERR:+: $ERR}" "$(yes_if '[[ "$ST" =~ ^20[04]$ ]]')"
 CREATE_SQL='CREATE ROLE "{{name}}" WITH LOGIN PASSWORD '"'"'{{password}}'"'"' VALID UNTIL '"'"'{{expiration}}'"'"'; GRANT SELECT ON probe_t TO "{{name}}";'

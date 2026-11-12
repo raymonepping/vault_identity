@@ -1,8 +1,7 @@
-// lib/rate.js: 20 answer attempts per minute per session (a rehearsal plays
-// the show twice in a minute). Stage pacing, not
-// security: Vault's context is the gate ("Context is not a password").
+// lib/rate.js: a sliding-window counter. server.js allows 10 sign-ins and 30
+// case runs a minute; Vault's own userpass lockout guards the password.
 export function createRate({
-  max = 20,
+  max,
   windowMs = 60_000,
   now = () => Date.now(),
 } = {}) {

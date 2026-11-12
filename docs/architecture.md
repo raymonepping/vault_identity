@@ -12,8 +12,9 @@ network vid-internal                              every Vault listener: TLS 1.3,
  │         file /vault/audit/audit.log (a volume per node) and stdout
  │         namespace observatory/: userpass/, approle/, kv/, database/,
  │           OAuth profile corvid-issuer, Agent Registry (2 agents), obs-* policies
- ├─ data:  postgres 17.11 (database finance), jsonlog connection log in vid-pg_log
- ├─ app:   api (Node 24, :14000) │ web (nginx + React, TLS :14001)
+ ├─ data:  postgres 17.11 (database finance, TLS 1.3 only on the network),
+ │         jsonlog connection log in vid-pg_log
+ ├─ app:   api (Node 24, not published) │ web (nginx + React, TLS :14001, proxies /api)
  ├─ Terraform: vault-seal (tf-seal) │ vault-platform (tf-platform)
  └─ Ansible:   localhost → Vault HTTPS API (ansible-seal, ansible-platform);
                the schema through `podman exec` as the postgres OS user

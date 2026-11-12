@@ -52,8 +52,10 @@ test("the cookie is HttpOnly, Secure and SameSite=Strict", () => {
 test("a write from another site or origin is refused; reads and same-origin writes pass", () => {
   const w = (h) => ({ method: "POST", headers: h });
   assert.equal(crossSiteWrite(w({ "sec-fetch-site": "same-site" })), true);
-  assert.equal(crossSiteWrite(w({ origin: "https://localhost:13701" }), "https://localhost:14001"), true);
-  assert.equal(crossSiteWrite(w({ "sec-fetch-site": "same-origin", origin: "https://localhost:14001" }), "https://localhost:14001"), false);
+  const own = ["https://localhost:14001", "https://127.0.0.1:14001"];
+  assert.equal(crossSiteWrite(w({ origin: "https://localhost:13701" }), own), true);
+  assert.equal(crossSiteWrite(w({ "sec-fetch-site": "same-origin", origin: "https://localhost:14001" }), own), false);
+  assert.equal(crossSiteWrite(w({ "sec-fetch-site": "same-origin", origin: "https://127.0.0.1:14001" }), own), false, "the IP spelling is the same console");
   assert.equal(crossSiteWrite({ method: "GET", headers: { "sec-fetch-site": "cross-site" } }), false);
 });
 

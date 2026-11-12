@@ -23,6 +23,9 @@ resource "vault_approle_auth_backend_role" "payments_batch" {
   token_policies = ["obs-payments-batch"]
   token_ttl      = 300
   token_max_ttl  = 600
+  # A copied secret id must not work forever: 30 days, then `make people`
+  # (run by every `make up`) mints a new one.
+  secret_id_ttl = 2592000
 }
 
 # The console's own token (D14): periodic, orphan, renewed by the API.

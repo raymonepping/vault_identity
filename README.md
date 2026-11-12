@@ -89,24 +89,26 @@ make doctor            # what is wrong, and which command fixes it
 
 | Command | What it proves |
 | --- | --- |
-| `make verify` | 76 checks: the cluster, the platform, the stage, PostgreSQL, the app, the console, the token boundary, drift, idempotency, a secret scan and `make rehearsal` |
-| `make rehearsal` | 55 checks through the console: all ten cases with their chain states, and every way they must fail |
+| `make verify` | 79 checks: the cluster, the platform, the stage, PostgreSQL (TLS only), the app, the console, the token boundary, drift, idempotency, a secret scan and `make rehearsal` |
+| `make rehearsal` | 56 checks through the console: all ten cases with their chain states, and every way they must fail |
 | `make boundary` | 62 checks: each tool token, Noor, the workload and the console token may do their job and nothing else |
 | `make test-ui` | 24 Playwright tests: cases from the UI, axe WCAG 2.1 AA on every page (desktop and phone), TLS and CSP |
 | `make probe` | 59 cases in a scratch namespace: what Vault 2.2.1 and PostgreSQL 17 actually do |
-| `make test-unit`, `make lint` | unit tests (53) and static checks, no stack needed |
+| `make test-unit`, `make lint` | unit tests (57) and static checks, no stack needed |
 
 ## Ports (127.0.0.1)
 
 | Service | Address |
 | --- | --- |
 | Console | <https://localhost:14001/> |
-| API | <http://127.0.0.1:14000/api/healthz> |
+| API (behind the console) | <https://localhost:14001/api/healthz> |
 | vault-1 to vault-3 | <https://localhost:19501/ui>, 19502, 19503 |
 | vault-s (the seal Vault) | <https://localhost:19500> |
 
-PostgreSQL is not published. Every container, compose project and volume
-carries the prefix `vid-`.
+PostgreSQL and the API are not published on their own: the API answers only
+behind the console's TLS, PostgreSQL only inside `vid-internal` and only over
+TLS 1.3. Every container, compose project and volume carries the prefix
+`vid-`.
 
 ## Where things are
 

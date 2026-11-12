@@ -112,7 +112,7 @@ echo "credentials"
 echo "app"
 for c in vid-api vid-web; do running "$c" || fix "$c is not running" "make up"; done
 if running vid-api; then
-  curl -sf "http://127.0.0.1:$(vid_conf VID_PORT_API)/api/healthz" >/dev/null && fine "the API answers from its store" || fix "the API does not answer" "make app-logs"
+  curl -sf --cacert vault-tls/ca-chain.pem "https://localhost:$(vid_conf VID_PORT_WEB)/api/healthz" >/dev/null && fine "the API answers from its store" || fix "the API does not answer" "make app-logs"
   for n in 1 2 3; do
     podman exec vid-api test -r "/audit/vault-$n/audit.log" || fix "the API cannot read vault-$n's audit file (Unknown evidence)" "make app-logs"
   done

@@ -161,3 +161,41 @@ No other lab was started or stopped.
   `make verify` 76/0 (162 s), `make test-ui` 24/0 (92 s). From nothing
   (`make clean-slate`, no root token): `make lab` 140 s, `make verify` 76/0
   (154 s).
+
+## Prompt 99: clean round 1 (2026-11-12)
+
+Committed the build first (`a1b193f`). Reviews: ponytail audit (whole repo),
+the performance pass the user asked for (measured), ponytail review (the
+build commit), backend audit (`api/`), security pass. 22 findings, all
+fixed:
+
+- 1: AppRole secret id never expired: `secret_id_ttl` 30 days.
+- 2: The console at `https://127.0.0.1:14001` refused every write: both loopback
+  origins accepted (`CONSOLE_URL` list; tested).
+- 3: The run-facts join had no unit test: moved to `store.runFacts`, tested.
+- 4: Dead `StatePill`. 5. Stale rate-limiter comment and default.
+- 6: Mixed timestamp precision sorted wrong: facts keep milliseconds (tested).
+- 7: The investigation page fetched `/api/session` with no run: split into
+  `RunView`. 8. Reset printed node:sqlite's warning. 9. Internal exports.
+- 10 to 13: Measured with a scratch store: 3 queries per credential took 655
+  ms at 10,000 runs; now `store.credentials()` (4 queries),
+  `latestRuns()`, an index on `fact(kind, at)`, the last login by `LIMIT 1`,
+  secret responses filtered in SQL. Limit stated in a `shortcut:` comment.
+- 14: A KV investigation said "version 21" (digits of "v2" and "1"): parsed
+  with `/version (\d+)/`; the e2e test now checks the hero text.
+- 15: A hung PostgreSQL query would block every later run: `query_timeout`.
+- 16: Unused `write_fields`. 17. "after null s" in the story.
+- 18: A run cut off by a restart said "running" forever: marked
+  `interrupted` at startup (tested).
+- 19: Refused console-token reads vanished: logged once per path and status.
+- 20: The run id is in the API's log line.
+- 21: Vault sent generated passwords to PostgreSQL in clear: TLS 1.3 with the
+  lab certificate, `pg_hba.conf` accepts the network only over TLS, Vault
+  `sslmode=verify-full`, the API verifies; the connect line's protocol is
+  evidence ("over TLSv1.3"). Rebuilt from nothing (the connection holds the
+  rotated root password): `make lab` 142 s.
+- 22: The API answered on plain HTTP: no longer published; health checks go
+  through the console's TLS.
+
+Results: unit tests 52 (API) + 5, `make probe` 59/59, `make verify` 79/0
+(165 s), `make test-ui` 24/0, rehearsal 56 (inside verify).

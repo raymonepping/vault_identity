@@ -14,7 +14,10 @@
 - The Identity Observatory (Node 24 API with `pg` and `node:sqlite`, React
   19, Vault daylight glass): ten cases, the evidence chain with five states,
   the decision panel, identities, secrets, a timeline of every fact.
-- `make probe` (59 cases), `make rehearsal` (55), `make verify` (76),
-  `make boundary` (62), `make test-ui` (24 with axe), 53 unit tests.
+- `make probe` (59 cases), `make rehearsal` (56), `make verify` (79),
+  `make boundary` (62), `make test-ui` (24 with axe), 57 unit tests.
+- PostgreSQL accepts network connections only over TLS 1.3 (the lab
+  certificate); Vault and the API verify it. The API is reachable only behind
+  the console's TLS.
 - `make up` and `make down` work from the Lab Index (`RUNTIME=podman`); `make
   up` builds the lab on its first run.

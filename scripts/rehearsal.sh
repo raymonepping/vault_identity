@@ -74,6 +74,8 @@ for c in 2 4 6; do
   f="$WORK/${RUN[$c]}.json"
   expect_jq "C$c" "case $c: the session is Correlated by username and run (R2+R3)" "$f" ".chain[] | select(.link == \"used\") | .state == \"Correlated\" and .rule == \"R2+R3\"" "$(link used)"
 done
+f="$WORK/${RUN[2]}.json"
+expect_jq C2 "Noor's session reached PostgreSQL over TLS 1.3" "$f" '[.story[] | select(.kind == "pg.connect") | .text] | any(test("over TLSv1.3"))' '[.story[] | select(.kind == "pg.connect") | .text] | .[0]'
 for c in 3 5; do
   f="$WORK/${RUN[$c]}.json"
   expect_jq "C$c" "case $c: the application's use is Correlated (R3)" "$f" ".chain[] | select(.link == \"used\") | .state == \"Correlated\" and .rule == \"R3\"" "$(link used)"

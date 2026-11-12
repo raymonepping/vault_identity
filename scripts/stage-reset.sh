@@ -19,7 +19,7 @@ fi
 ./scripts/ansible.sh stage-reset >/dev/null
 ./scripts/ansible.sh stage >/dev/null
 if [ "$(vid_container_state vid-api)" = running ]; then
-  podman exec vid-api node scripts/reset.js || die "stage-reset: the API could not clear its evidence store (podman logs vid-api)"
+  podman exec vid-api node --disable-warning=ExperimentalWarning scripts/reset.js || die "stage-reset: the API could not clear its evidence store (podman logs vid-api)"
 else
   echo "stage-reset: the API is not running, so its evidence store was NOT cleared: make up, then make stage-reset again"
 fi

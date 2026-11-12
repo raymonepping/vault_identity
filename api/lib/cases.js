@@ -88,7 +88,9 @@ export function createCases({ cases, call, ns, consoleToken, issuer, store, newP
     let kvVersion = null;
     let outcome = 'allowed';
     const connect = async () => {
-      const c = newPgClient({ host: 'postgres', port: 5432, database: 'finance', user: creds.username, password: creds.password, application_name: `${kase.principal}:${run8}`, connectionTimeoutMillis: 5000 });
+      const c = newPgClient({ host: 'postgres', port: 5432, database: 'finance', user: creds.username, password: creds.password, application_name: `${kase.principal}:${run8}`, connectionTimeoutMillis: 5000, query_timeout: 10000,
+        // TLS, verified: the lab CA comes in through NODE_EXTRA_CA_CERTS; the certificate names postgres.
+        ssl: { rejectUnauthorized: true, servername: 'postgres' } });
       c.on('error', () => {}); // a dropped connection must not crash the API
       await c.connect();
       return c;

@@ -1,8 +1,7 @@
-// components/ui.jsx: small shared pieces (vault_dance, vault_codex). Colour only for state
-// (DESIGN.md): ok, warn, denied, info.
+// components/ui.jsx: small shared pieces (vault_dance, vault_codex).
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { call } from '../api.js';
-import { CircleCheck, CircleX, TriangleAlert, X, LogIn } from 'lucide-react';
+import { X, LogIn } from 'lucide-react';
 
 // The signed-in person and what Vault allows them (GET /api/me), plus
 // refresh() after a sign-in or sign-out.
@@ -12,17 +11,6 @@ export const useAuth = () => useContext(AuthContext);
 // Vault's errors arrive as "1 error occurred:\n\t* permission denied\n\n".
 const tidy = (v) => String(v).replace(/^\d+ errors? occurred:\s*/, '').replace(/^\*\s*/, '').replace(/\s+/g, ' ').trim();
 
-
-export function StatePill({ state, children }) {
-  const map = { ok: 'vg-pill vg-pill--healthy', warn: 'vg-pill vg-pill--pending', denied: 'vg-pill vg-pill--rejected', info: 'vg-pill vg-pill--approved' };
-  const Icon = state === 'ok' ? CircleCheck : state === 'denied' ? CircleX : state === 'warn' ? TriangleAlert : null;
-  return (
-    <span className={map[state] || 'vg-pill vg-pill--manual'}>
-      {Icon && <Icon size={12} aria-hidden="true" />}
-      {children}
-    </span>
-  );
-}
 
 // An error from the API, with Vault's own error lines verbatim.
 export { tidy };

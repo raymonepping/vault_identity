@@ -253,7 +253,7 @@ app-rebuild: ## (changes state) Rebuild images and recreate those services: make
 open: ## Print the console, API and Vault addresses
 	@bash -c '. ./scripts/common.sh && \
 		echo "Observatory:        https://localhost:$$(vid_conf VID_PORT_WEB)/" && \
-		echo "API:                http://127.0.0.1:$$(vid_conf VID_PORT_API)/api/healthz" && \
+		echo "API:                https://localhost:$$(vid_conf VID_PORT_WEB)/api/healthz (behind the console)" && \
 		echo "Vault UI (vault-1): https://localhost:$$(vid_conf VID_PORT_VAULT_1)/ui" && \
 		echo "Vault seal:         https://localhost:$$(vid_conf VID_PORT_VAULT_S)"'
 

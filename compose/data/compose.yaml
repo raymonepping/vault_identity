@@ -3,7 +3,8 @@
 #
 # Local (socket) connections use peer auth: only `podman exec -u postgres`
 # reaches the superuser without a password (Ansible's schema phase). Network
-# connections need scram. The bootstrap password is handed to Vault once
+# connections need TLS 1.3 (the lab certificate, SAN postgres) and SCRAM:
+# pg_hba.conf refuses anything else. Vault and the API verify the certificate. The bootstrap password is handed to Vault once
 # (Terraform, password_wo) and then rotated away (Ansible data, D8).
 #
 # Connection evidence (D13): connections and disconnections are logged as
@@ -21,7 +22,11 @@ services:
     entrypoint:
       - sh
       - -c
-      - chown 70:70 /var/log/postgresql && chmod 0755 /var/log/postgresql && exec docker-entrypoint.sh "$$@"
+      - >-
+        chown 70:70 /var/log/postgresql && chmod 0755 /var/log/postgresql &&
+        install -m 0644 -o 70 -g 70 /tls-src/vault.crt /var/run/postgresql/server.crt &&
+        install -m 0600 -o 70 -g 70 /tls-src/vault.key /var/run/postgresql/server.key &&
+        exec docker-entrypoint.sh "$$@"
       - --
     environment:
       POSTGRES_DB: finance
@@ -50,6 +55,16 @@ services:
       - log_disconnections=on
       - -c
       - log_statement=none
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/var/run/postgresql/server.crt
+      - -c
+      - ssl_key_file=/var/run/postgresql/server.key
+      - -c
+      - ssl_min_protocol_version=TLSv1.3
+      - -c
+      - hba_file=/etc/postgresql/pg_hba.conf
     # The entrypoint starts as root, fixes ownership, then drops to postgres.
     cap_drop: [ALL]
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
@@ -58,6 +73,8 @@ services:
       - pg-data:/var/lib/postgresql/data
       - pg-log:/var/log/postgresql
       - ../../.secrets/data/pg-bootstrap:/run/secrets/pg-bootstrap:ro
+      - ../../vault-tls:/tls-src:ro
+      - ./pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
     networks:
       default:
         aliases: [postgres]

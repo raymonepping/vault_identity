@@ -89,6 +89,7 @@ export function fromAudit(e, node, namespace = 'observatory') {
 
 const SESSION_TIME = /session time: (\d+):(\d+):([\d.]+)/;
 const APPNAME = /application_name=(\S+)/;
+const TLS = /SSL enabled \(protocol=([^,]+)/;
 
 // fromPg(line) -> null or { id, at, facts }. Only Vault-generated users
 // (v-<display>-<role>-...) are evidence; the postgres OS user's healthcheck and
@@ -115,6 +116,8 @@ export function fromPg(l) {
       database: l.dbname || null,
       remote_host: l.remote_host || null,
       application_name: l.application_name || APPNAME.exec(msg)?.[1] || null,
+      // The connect line names the TLS protocol when the session is encrypted.
+      tls: kind === 'pg.connect' ? TLS.exec(msg)?.[1] || null : null,
       state_code: l.state_code || null,
       message: msg,
       session_seconds: st ? Number(st[1]) * 3600 + Number(st[2]) * 60 + Number(st[3]) : null,

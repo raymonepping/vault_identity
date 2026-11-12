@@ -16,6 +16,9 @@ enforced by Vault or by the operating system; the API never decides access.
 | The console token reads identity and configuration, looks up leases, revokes `finance-readonly` leases only; never a value or a credential | `obs-console` (`allowed_parameters` on the revoke) | `make boundary`, rehearsal N6 to N8 |
 | Only Noor signs in to the console; a run takes no parameters; writes from another site are refused | `api/lib/session.js`, `server.js` | rehearsal N1 to N5, `make test-ui` |
 | The database root password is known only to Vault | `rotate-root` | `make verify` (data section) |
+| Generated database passwords and every session travel over TLS 1.3 | PostgreSQL `ssl=on`, `pg_hba.conf` (`hostssl` only), Vault `sslmode=verify-full`, the API's verified TLS | `make verify` (a plain connection is refused), rehearsal C2 (the session's log line names TLSv1.3) |
+| The API has no door of its own | not published; only nginx (TLS 1.3) reaches it | `make verify` (`podman port vid-api` is empty) |
+| A copied AppRole secret id stops working | `secret_id_ttl` 30 days; `make people` mints a new one | `terraform/vault-platform/auth.tf` |
 
 ## The stage-hand shortcut (D11)
 

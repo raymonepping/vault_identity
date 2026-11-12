@@ -16,13 +16,13 @@ for t in api web; do
 done
 "$VID_ROOT/scripts/compose.sh" app up -d
 for _ in $(seq 1 40); do
-  curl -sf "http://127.0.0.1:$(vid_conf VID_PORT_API)/api/healthz" >/dev/null 2>&1 && break
+  curl -sf --cacert "$VID_ROOT/vault-tls/ca-chain.pem" "https://localhost:$(vid_conf VID_PORT_WEB)/api/healthz" >/dev/null 2>&1 && break
   sleep 3
 done
-curl -sf "http://127.0.0.1:$(vid_conf VID_PORT_API)/api/healthz" >/dev/null || die "app-up: the API is not healthy (make app-logs)"
+curl -sf --cacert "$VID_ROOT/vault-tls/ca-chain.pem" "https://localhost:$(vid_conf VID_PORT_WEB)/api/healthz" >/dev/null || die "app-up: the API is not healthy behind the console (make app-logs)"
 # Only reached after a successful start: one-shot init containers go (compose
 # recreates them on the next up). A failed start keeps them and their logs.
 "$VID_ROOT/scripts/compose.sh" app rm -f volume-init >/dev/null 2>&1 || true
 echo "app-up: stack started, the API answers; one-shot volume-init removed"
 echo "  Console: https://localhost:$(vid_conf VID_PORT_WEB)/   (lab CA; make trust-root to trust it)"
-echo "  API:     http://127.0.0.1:$(vid_conf VID_PORT_API)/api/healthz"
+echo "  API:     https://localhost:$(vid_conf VID_PORT_WEB)/api/healthz (behind the console; not published on its own)"

@@ -13,7 +13,8 @@ function verdict(inv) {
   if (!d) return 'Waiting for the audit record of this run.';
   if (d.outcome === 'denied') return `Vault denied it: ${d.code}. Nothing was issued.`;
   const used = inv.chain.find((l) => l.link === 'used');
-  const kind = inv.case.secret_kind === 'leased_dynamic' ? 'a database credential' : `version ${inv.chain.find((l) => l.link === 'issued').detail.replace(/\D+/g, '') || '?'} of the secret`;
+  const version = /version (\d+)/.exec(inv.chain.find((l) => l.link === 'issued').detail)?.[1] || '(not in the record)';
+  const kind = inv.case.secret_kind === 'leased_dynamic' ? 'a database credential' : `version ${version} of the secret`;
   const tail = { Correlated: 'and a downstream source shows it used', Partial: 'and nothing downstream shows it used yet', Unmatched: 'and nothing downstream shows it used', Unknown: 'but the downstream source could not be read' }[used.state] || '';
   const revoked = inv.afterRevoke.length ? ' Then the lease was revoked: the open session stayed connected and lost its privileges.' : '';
   return `Vault allowed it and issued ${kind}, ${tail}.${revoked}`;
@@ -129,23 +130,6 @@ export default function Investigation() {
   const cases = useResource('cases', '/api/cases');
   const latest = (cases.data?.cases || []).map((c) => c.last_run).filter(Boolean).sort((a, b) => b.started_at.localeCompare(a.started_at))[0];
   const id = param || latest?.id || null;
-  const inv = useResource(`investigation ${id}`, id ? `/api/runs/${id}` : '/api/session');
-  const [raw, setRaw] = useState(null);
-  const settled = inv.data?.settled;
-  const { reload } = inv;
-  useEffect(() => {
-    if (!id || settled || !me.signedIn) return undefined;
-    const t = setInterval(() => reload(), 3000);
-    return () => clearInterval(t);
-  }, [id, settled, me.signedIn, reload]);
-  const openRaw = async (rawId) => {
-    try {
-      setRaw(await call(`Raw record ${rawId}`, `/api/raw/${rawId}`, { quiet: true }));
-    } catch (e) {
-      setRaw({ error: e.message });
-    }
-  };
-
   if (!me.signedIn) return <SignInNotice />;
   if (!id)
     return (
@@ -155,6 +139,28 @@ export default function Investigation() {
         </a>
       </Hero>
     );
+  return <RunView key={id} id={id} />;
+}
+
+// One run's investigation; polls every 3 s until nothing more can change.
+function RunView({ id }) {
+  const inv = useResource(`investigation ${id}`, `/api/runs/${id}`);
+  const [raw, setRaw] = useState(null);
+  const settled = inv.data?.settled;
+  const { reload } = inv;
+  useEffect(() => {
+    if (settled) return undefined;
+    const t = setInterval(() => reload(), 3000);
+    return () => clearInterval(t);
+  }, [settled, reload]);
+  const openRaw = async (rawId) => {
+    try {
+      setRaw(await call(`Raw record ${rawId}`, `/api/raw/${rawId}`, { quiet: true }));
+    } catch (e) {
+      setRaw({ error: e.message });
+    }
+  };
+
   const d = inv.data;
   if (!d?.chain) return inv.error ? <ErrorNotice error={inv.error} title="No investigation" /> : <Loading label="Reading the evidence" />;
   return (

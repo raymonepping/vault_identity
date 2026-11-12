@@ -10,7 +10,10 @@ import { randomBytes } from "node:crypto";
 import { call, ns } from "./vault.js";
 
 export const COOKIE = "obs_sid";
-export const CONSOLE_URL = (process.env.CONSOLE_URL || "https://localhost:14001").replace(/\/$/, "");
+// The console's origins: both loopback spellings of its port (the certificate
+// names both), comma separated in CONSOLE_URL.
+export const CONSOLE_URLS = (process.env.CONSOLE_URL || "https://localhost:14001,https://127.0.0.1:14001")
+  .split(",").map((u) => u.trim().replace(/\/$/, "")).filter(Boolean);
 const IDLE_MS = Number(process.env.SESSION_IDLE_SECONDS || 14400) * 1000;
 export const REQUESTOR = process.env.CONSOLE_USER || "noor";
 
@@ -44,12 +47,12 @@ export const sessionCookie = (id, maxAgeSeconds) =>
 // local app would still carry a SameSite cookie. Browsers name the origin of
 // a request in Sec-Fetch-Site and Origin: a write from anywhere but this
 // console is refused before it can run a case on Noor's behalf.
-export function crossSiteWrite(req, consoleUrl = CONSOLE_URL) {
+export function crossSiteWrite(req, consoleUrls = CONSOLE_URLS) {
   if (req.method === "GET" || req.method === "HEAD") return false;
   const site = req.headers["sec-fetch-site"];
   if (site && site !== "same-origin" && site !== "none") return true;
   const origin = req.headers.origin;
-  return Boolean(origin) && origin !== consoleUrl;
+  return Boolean(origin) && !consoleUrls.includes(origin);
 }
 
 // createSessions({ login, revoke, now }): the store. login(user, password)

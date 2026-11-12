@@ -23,7 +23,7 @@ export const VAULT_NODES = (
   .split(",")
   .map((s) => s.trim().replace(/\/$/, ""))
   .filter(Boolean);
-export const NAMESPACE = process.env.VID_NAMESPACE || "observatory";
+const NAMESPACE = process.env.VID_NAMESPACE || "observatory";
 const TOKEN_FILE = process.env.CONSOLE_TOKEN_FILE || "/run/secrets/vault/console";
 const ACTIVE_TTL_MS = 5_000;
 
@@ -81,7 +81,7 @@ async function fetchWithTimeout(url, opts, timeoutMs) {
 
 let active = { addr: null, at: 0 };
 
-export async function activeAddr() {
+async function activeAddr() {
   if (active.addr && Date.now() - active.at < ACTIVE_TTL_MS) return active.addr;
   for (const addr of VAULT_NODES) {
     try {
@@ -102,7 +102,7 @@ export async function activeAddr() {
   throw new VaultError(503, "no active Vault node among vault-1..3");
 }
 
-export const nodeName = (addr) =>
+const nodeName = (addr) =>
   String(addr || "").replace(/^https?:\/\/([^:/]+).*/, "$1");
 
 // call(token | null, METHOD, path, { body, headers, timeoutMs })

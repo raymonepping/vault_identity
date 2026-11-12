@@ -25,6 +25,7 @@ test('case 1: Noor reads the key; use stays Partial and says why', async ({ page
   await run(page, 1);
   await expect(link(page, 'Requested')).toContainText('Confirmed');
   await expect(link(page, 'Used')).toContainText('no application reported using it');
+  await expect(page.locator('.vg-hero')).toContainText('issued version 1 of the secret');
 });
 
 test('case 6: the finance agent for Noor; both principals and the ceiling recorded', async ({ page }) => {

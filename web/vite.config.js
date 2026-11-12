@@ -6,6 +6,8 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
-    proxy: { "/api": "http://127.0.0.1:14000", "/auth": "http://127.0.0.1:14000" },
+    // The API is reachable only behind the console's TLS: run the dev server
+    // with NODE_EXTRA_CA_CERTS=../vault-tls/ca-chain.pem so the lab CA verifies.
+    proxy: { "/api": { target: "https://localhost:14001", changeOrigin: true } },
   },
 });

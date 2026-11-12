@@ -50,6 +50,7 @@ test('jsonlog: the connect line names the application only in its message', () =
   const { facts: [c] } = fromPg(F.pgConnect);
   assert.equal(c.kind, 'pg.connect');
   assert.equal(c.application_name, 'finance-agent:0a1b2c3d');
+  assert.equal(c.tls, 'TLSv1.3');
   assert.equal(c.at, '2026-11-12T08:00:01.000Z');
   const { facts: [d] } = fromPg(F.pgDisconnect);
   assert.equal(d.kind, 'pg.disconnect');

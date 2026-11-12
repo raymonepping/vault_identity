@@ -28,7 +28,7 @@ function rig({ entity = 'e-noor', vault = async () => issued } = {}) {
 test('a run never keeps the generated password', async () => {
   const { runner, store, session } = rig();
   await runner.run(session, 6);
-  const dump = JSON.stringify(store.runs()) + JSON.stringify(store.factsWhere('1 = 1'));
+  const dump = JSON.stringify(store.latestRuns().map((r) => store.run(r.id))) + JSON.stringify(store.factsWhere('1 = 1'));
   assert.equal(dump.includes(PASSWORD), false);
   assert.equal(dump.includes('jwt:'), false, 'no JWT in the store either');
 });

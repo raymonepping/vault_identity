@@ -29,7 +29,6 @@ export function conf(name: string): string {
 
 export const urls = {
   web: `https://localhost:${conf('VID_PORT_WEB')}`,
-  api: `http://127.0.0.1:${conf('VID_PORT_API')}`,
 };
 
 const LAB_CA = path.join(ROOT, 'vault-tls/ca-chain.pem');

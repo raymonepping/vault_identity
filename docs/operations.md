@@ -36,7 +36,7 @@ that moment on. Vault's audit files and PostgreSQL's log are never edited.
 | Seal tokens | `.secrets/vault/seal/vault-N` | `make seal-token-status`, `make seal-token-rotate NODE=` |
 | Console token (`obs-console`) | `.secrets/vault/tokens/console` | periodic 24h, the API renews it hourly; `make people` re-mints an invalid one |
 | Noor's password | `.secrets/people/noor` | created once; `make people-copy-password` copies, never prints |
-| The workload's AppRole role id and secret id | `.secrets/approle/payments-batch/` | `make people` re-mints an invalid secret id |
+| The workload's AppRole role id and secret id | `.secrets/approle/payments-batch/` | the secret id lives 30 days; `make people` (every `make up`) re-mints an invalid one |
 | The lab issuer's key pair | `.secrets/issuer/` | created once by `make gen-certs`; the public key is in Vault's profile |
 | PostgreSQL's bootstrap password | `.secrets/data/pg-bootstrap` | used once by Terraform, then rotated away (`make data`) |
 

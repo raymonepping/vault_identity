@@ -45,7 +45,6 @@ resource "vault_generic_endpoint" "profile_alias" {
   path           = "identity/entity-alias"
   disable_read   = true
   disable_delete = true
-  write_fields   = ["id"]
   data_json = jsonencode({
     name         = each.value
     canonical_id = vault_identity_entity.principal[each.key].id

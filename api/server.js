@@ -60,8 +60,15 @@ async function cached(key, ttlMs, fn) {
   cache.set(key, { at: Date.now(), value });
   return value;
 }
+// A refusal is logged once per path and status: a view that silently loses a
+// field (the console token lacking a capability) must leave a trace.
+const refusedOnce = new Set();
 const consoleRead = async (path) => {
   const r = await call(consoleToken(), 'GET', ns(path));
+  if (!r.ok && r.status !== 404 && !refusedOnce.has(`${path} ${r.status}`)) {
+    refusedOnce.add(`${path} ${r.status}`);
+    console.error(JSON.stringify({ at: new Date().toISOString(), console_read: path, status: r.status, error: r.errors[0] || null }));
+  }
   return r.ok ? r.json?.data ?? null : null;
 };
 const entities = () => cached('entities', 30_000, async () => {
@@ -129,23 +136,6 @@ function whoOf(d, ents) {
   return name(ents, d.entity_id);
 }
 
-// Facts that belong to one run: by correlation id, then the database user and
-// lease it was issued, then the subject's last login before the run.
-function runFacts(run) {
-  const own = store.factsWhere('correlation_id = ?', run.correlation_id);
-  const resp = secretResponse(own, run.correlation_id);
-  const more = [];
-  if (resp?.db_user) more.push(...store.factsWhere("db_user = ? AND kind LIKE 'pg.%'", resp.db_user));
-  if (resp?.lease_id) more.push(...store.factsWhere("lease_id = ? AND kind LIKE 'lease.%'", resp.lease_id));
-  if (resp?.data.entity_id && ['human', 'workload'].includes(resp.data.flow)) {
-    const login = store.factsWhere("kind = 'vault.response' AND json_extract(data, '$.login_entity') = ? AND at <= ?", resp.data.entity_id, run.finished_at || new Date().toISOString()).at(-1);
-    if (login) more.push(login);
-  }
-  const seen = new Set();
-  return [...own, ...more].filter((f) => !seen.has(f.id) && seen.add(f.id)).sort((a, b) => a.at.localeCompare(b.at) || a.id - b.id);
-}
-
-const SECRET_PATH = /^(kv\/data|database\/creds)\//;
 const SOURCE_OF = { vault: 'Vault audit', pg: 'PostgreSQL log', app: 'application', lease: 'Vault lease lookup' };
 function storyLine(f, ents) {
   const d = f.data;
@@ -163,8 +153,8 @@ function storyLine(f, ents) {
       else if (/^sys\/leases\/revoke$/.test(d.path)) text = d.error ? `Vault refused the revoke: ${d.error_code}` : 'Vault revoked the lease';
       else text = d.error ? `Vault denied it: ${d.error_code}` : d.kv_version != null ? `Vault returned version ${d.kv_version}` : f.lease_id ? `Vault issued ${f.db_user} (lease)` : 'Vault answered';
       break;
-    case 'pg.connect': text = `PostgreSQL accepted ${f.db_user}${d.application_name ? ` from ${d.application_name}` : ''}`; break;
-    case 'pg.disconnect': text = `PostgreSQL closed the session of ${f.db_user} after ${d.session_seconds} s`; break;
+    case 'pg.connect': text = `PostgreSQL accepted ${f.db_user}${d.application_name ? ` from ${d.application_name}` : ''}${d.tls ? ` over ${d.tls}` : ' without TLS'}`; break;
+    case 'pg.disconnect': text = `PostgreSQL closed the session of ${f.db_user}${d.session_seconds != null ? ` after ${d.session_seconds} s` : ''}`; break;
     case 'pg.error': text = `PostgreSQL refused a query of ${f.db_user}: ${d.message}`; break;
     case 'pg.login_failed': text = `PostgreSQL refused a login of ${f.db_user}: ${d.message}`; break;
     case 'app.event': text = d.detail; break;
@@ -177,7 +167,7 @@ function storyLine(f, ents) {
 
 async function investigation(run) {
   const kase = kaseOf(run.case_id);
-  const facts = runFacts(run);
+  const facts = store.runFacts(run, secretResponse);
   const ents = await entities().catch(() => ({}));
   const inv = investigate({ run, kase, facts, readable: readable(), windowSeconds: WINDOW });
   if (inv.principals) {
@@ -236,7 +226,7 @@ const routes = {
 
   'GET /api/cases': async (req) => {
     sessions.get(req);
-    const runs = store.runs();
+    const runs = store.latestRuns();
     return {
       principals: cases.principals,
       busy: runner.busy(),
@@ -285,20 +275,17 @@ const routes = {
     }
     const role = await consoleRead('database/roles/finance-readonly');
     const ents = await entities().catch(() => ({}));
-    const issued = store.factsWhere("kind = 'vault.response' AND lease_id IS NOT NULL").map((f) => {
-      const ended = store.factsWhere("kind = 'lease.ended' AND lease_id = ?", f.lease_id)[0];
-      const active = store.factsWhere("kind = 'lease.active' AND lease_id = ?", f.lease_id).at(-1);
-      const used = store.factsWhere("kind = 'pg.connect' AND db_user = ?", f.db_user).length;
-      return { lease_id: f.lease_id, db_user: f.db_user, at: f.at, correlation_id: f.correlation_id, requested_by: whoOf(f.data, ents), actor: f.data.auth_metadata.actor_entity_name, flow: f.data.flow, sessions: used, state: ended ? 'ended' : active ? 'active' : 'unknown', expire_time: active?.data.expire_time ?? null };
-    }).reverse();
+    const issued = store.credentials().map(({ fact: f, ended, active, sessions }) => ({
+      lease_id: f.lease_id, db_user: f.db_user, at: f.at, correlation_id: f.correlation_id, requested_by: whoOf(f.data, ents),
+      actor: f.data.auth_metadata.actor_entity_name, flow: f.data.flow, sessions, state: ended ? 'ended' : active ? 'active' : 'unknown', expire_time: active?.expire_time ?? null,
+    })).reverse();
     return { kv, database_role: role ? { db_name: role.db_name, default_ttl: role.default_ttl, max_ttl: role.max_ttl } : null, credentials: issued };
   },
 
   'GET /api/overview': async (req) => {
     sessions.get(req);
     const ents = await entities().catch(() => ({}));
-    const resp = store.factsWhere("kind = 'vault.response' AND json_extract(data, '$.login_entity') IS NULL");
-    const secretResp = resp.filter((f) => SECRET_PATH.test(f.data.path));
+    const secretResp = store.secretResponses();
     const requesters = {};
     for (const f of secretResp) {
       const who = whoOf(f.data, ents) || 'unknown (no identity in the record)';
@@ -317,18 +304,17 @@ const routes = {
     const nowMs = Date.now();
     const look = [];
     for (const f of secretResp.filter((x) => x.data.error)) look.push({ at: f.at, what: 'denied', detail: `${f.data.error_code} on ${f.data.path}`, correlation_id: f.correlation_id });
-    for (const f of secretResp.filter((x) => x.lease_id && x.db_user)) {
-      if (nowMs - Date.parse(f.at) > WINDOW * 1000 && !store.factsWhere("kind = 'pg.connect' AND db_user = ?", f.db_user).length)
+    const creds = store.credentials();
+    for (const { fact: f, sessions } of creds) {
+      if (f.db_user && !sessions && nowMs - Date.parse(f.at) > WINDOW * 1000)
         look.push({ at: f.at, what: 'unmatched', detail: `${f.db_user} was issued and no connection was observed in ${WINDOW} s`, correlation_id: f.correlation_id });
     }
     for (const f of store.factsWhere("kind IN ('pg.error', 'pg.login_failed')")) look.push({ at: f.at, what: f.kind === 'pg.error' ? 'query refused' : 'login refused', detail: `${f.db_user}: ${f.data.message}`, correlation_id: null });
     for (const f of secretResp.filter((x) => !String(x.correlation_id || '').startsWith('run-'))) look.push({ at: f.at, what: 'outside the console', detail: `${whoOf(f.data, ents) || 'an unknown caller'} asked for ${f.data.path} without a run correlation id`, correlation_id: f.correlation_id });
-    const active = store.factsWhere("kind = 'lease.active' AND lease_id NOT IN (SELECT lease_id FROM fact WHERE kind = 'lease.ended')");
-    const activeByLease = new Map(active.map((f) => [f.lease_id, f]));
     return {
       requesters: Object.values(requesters).sort((a, b) => b.last.localeCompare(a.last)),
       consumers: Object.values(consumers).sort((a, b) => b.last.localeCompare(a.last)),
-      active_credentials: [...activeByLease.values()].map((f) => ({ lease_id: f.lease_id, expire_time: f.data.expire_time })),
+      active_credentials: creds.filter((c) => c.active && !c.ended).map((c) => ({ lease_id: c.fact.lease_id, expire_time: c.active.expire_time })),
       look: look.sort((a, b) => b.at.localeCompare(a.at)).slice(0, 20),
       sources: readable(),
     };
@@ -346,6 +332,7 @@ async function idRoute(req, res, url) {
     // Paths, RAR and purpose come from config/cases.json only (D12).
     if (Object.keys(b).length) throw new HttpError(400, 'a run takes no parameters; the case defines them');
     const run = await runner.run(s, m[1]);
+    res.runId = run.id;
     return { run };
   }
   m = /^\/api\/runs\/(run-\d+-[0-9a-f]{8})$/.exec(url.pathname);
@@ -372,7 +359,7 @@ export const server = http.createServer(async (req, res) => {
   // One JSON line per request: never headers, bodies or tokens. Quiet polls.
   res.on('finish', () => {
     if (req.method === 'GET' && res.statusCode < 400) return;
-    console.log(JSON.stringify({ at: new Date().toISOString(), method: req.method, path: url.pathname, status: res.statusCode, ms: Date.now() - t0 }));
+    console.log(JSON.stringify({ at: new Date().toISOString(), method: req.method, path: url.pathname, status: res.statusCode, ms: Date.now() - t0, run_id: res.runId || null }));
   });
   if (session.crossSiteWrite(req)) return send(res, 403, { ok: false, error: 'refused: this request came from another site' });
   try {
@@ -407,6 +394,8 @@ async function renewConsole() {
 
 if (process.env.NODE_ENV !== 'test') {
   if (store.meta('ingest_since') === null) store.setMeta('ingest_since', new Date(0).toISOString());
+  const interrupted = store.markInterrupted();
+  if (interrupted) console.log(JSON.stringify({ at: new Date().toISOString(), runs_interrupted: interrupted }));
   server.listen(PORT, () => console.log(`[identity-api] listening on :${PORT}, Vault ${VAULT_NODES.join(' ')}`));
   renewConsole();
   setInterval(renewConsole, 3_600_000).unref();

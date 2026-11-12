@@ -14,7 +14,7 @@ const noLeases = async () => ({ ok: true, json: { data: {} }, errors: [] });
 
 test('a replayed source record is stored once', () => {
   const s = openStore(':memory:');
-  const rec = { source: 'vault-audit:vault-1', id: 'a', at: 't', body: '{}', facts: [{ kind: 'vault.request', at: 't' }] };
+  const rec = { source: 'vault-audit:vault-1', id: 'a', at: '2026-11-12T08:00:00Z', body: '{}', facts: [{ kind: 'vault.request', at: '2026-11-12T08:00:00Z' }] };
   assert.equal(s.add(rec), true);
   assert.equal(s.add(rec), false);
   assert.equal(s.factsWhere('1 = 1').length, 1);
@@ -73,7 +73,7 @@ test('a missing source is unreadable, not empty', async () => {
 
 test('a lease lookup records active once and ended once', async () => {
   const store = openStore(':memory:');
-  store.add({ source: 'vault-audit:vault-1', id: 'x', at: 't', body: '{}', facts: [{ kind: 'vault.response', at: 't', lease_id: F.LEASE, db_user: F.USER }] });
+  store.add({ source: 'vault-audit:vault-1', id: 'x', at: '2026-11-12T08:00:00Z', body: '{}', facts: [{ kind: 'vault.response', at: '2026-11-12T08:00:00Z', lease_id: F.LEASE, db_user: F.USER }] });
   let answer = { ok: true, status: 200, errors: [], json: { data: { expire_time: '2026-11-12T08:10:00Z', ttl: 600 } } };
   const c = createCollector({ store, audits: {}, pgLog: '/nonexistent', lookupLease: async () => answer, log: quietLog });
   await c.cycle();
@@ -99,4 +99,61 @@ test('reset forgets the evidence and ingests from now on', async () => {
   assert.equal(store.factsWhere('1 = 1').length, 0);
   store.close();
   rmSync(d, { recursive: true });
+});
+
+import { secretResponse } from '../lib/correlate.js';
+
+// One run as the collector stores it: its request and response, a later revoke
+// response, its session, someone else's session, two logins of the subject.
+function seededRun() {
+  const s = openStore(':memory:');
+  const corr = 'run-2-0a1b2c3d';
+  const add = (id, at, fact) => s.add({ source: 'test', id, at, body: '{}', facts: [{ at, ...fact }] });
+  add('l1', '2026-11-12T07:00:00Z', { kind: 'vault.response', path: 'auth/userpass/login/noor', login_entity: 'e-noor' });
+  add('l2', '2026-11-12T07:59:00Z', { kind: 'vault.response', path: 'auth/userpass/login/noor', login_entity: 'e-noor' });
+  add('l3', '2026-11-12T09:00:00Z', { kind: 'vault.response', path: 'auth/userpass/login/noor', login_entity: 'e-noor' });
+  add('rq', '2026-11-12T08:00:00.100000000Z', { kind: 'vault.request', correlation_id: corr, path: 'database/creds/finance-readonly' });
+  add('rs', '2026-11-12T08:00:00.200000000Z', { kind: 'vault.response', correlation_id: corr, path: 'database/creds/finance-readonly', lease_id: 'L1', db_user: 'v-noor-1', entity_id: 'e-noor', flow: 'human' });
+  add('rv', '2026-11-12T08:00:05Z', { kind: 'vault.response', correlation_id: corr, path: 'sys/leases/revoke' });
+  add('pc', '2026-11-12T08:00:00.200500000Z', { kind: 'pg.connect', db_user: 'v-noor-1' });
+  add('px', '2026-11-12T08:00:01Z', { kind: 'pg.connect', db_user: 'v-someone-else' });
+  add('la', '2026-11-12T08:00:02Z', { kind: 'lease.active', lease_id: 'L1', expire_time: '2026-11-12T08:10:00Z' });
+  return { s, run: { correlation_id: corr, finished_at: '2026-11-12T08:00:06Z' } };
+}
+
+test("runFacts: the credential's user and lease, the last login before the run, nobody else's session", () => {
+  const { s, run } = seededRun();
+  const kinds = s.runFacts(run, secretResponse).map((f) => `${f.kind}:${f.db_user || f.lease_id || f.data.path}`);
+  assert.ok(kinds.includes('pg.connect:v-noor-1'));
+  assert.ok(!kinds.includes('pg.connect:v-someone-else'));
+  assert.ok(kinds.includes('lease.active:L1'));
+  const logins = s.runFacts(run, secretResponse).filter((f) => f.data.login_entity);
+  assert.equal(logins.length, 1);
+  assert.equal(logins[0].at, '2026-11-12T07:59:00.000Z', 'the last login before the run ended, not the one after');
+});
+
+test('times of different precision sort by time (Vault 9 digits, PostgreSQL 3)', () => {
+  const { s, run } = seededRun();
+  const order = s.runFacts(run, secretResponse).map((f) => f.kind);
+  assert.ok(order.indexOf('vault.response') < order.indexOf('pg.connect'), 'the response at .200 comes before the connect at .2005');
+});
+
+test('credentials: lease state and sessions per issued credential, in a few queries', () => {
+  const { s } = seededRun();
+  s.add({ source: 'test', id: 'le', at: '2026-11-12T08:10:01Z', body: '{}', facts: [{ kind: 'lease.ended', at: '2026-11-12T08:10:01Z', lease_id: 'L1' }] });
+  const [c] = s.credentials();
+  assert.equal(c.fact.db_user, 'v-noor-1');
+  assert.equal(c.sessions, 1);
+  assert.equal(c.ended, true);
+  assert.equal(c.active.expire_time, '2026-11-12T08:10:00Z');
+});
+
+test('the latest run per case, and a run the API never finished is marked interrupted', () => {
+  const s = openStore(':memory:');
+  s.saveRun({ id: 'run-1-00000001', case_id: 1, principal: 'noor', correlation_id: 'run-1-00000001', started_at: '2026-11-12T08:00:00Z', finished_at: '2026-11-12T08:00:01Z', outcome: 'allowed' });
+  s.saveRun({ id: 'run-1-00000002', case_id: 1, principal: 'noor', correlation_id: 'run-1-00000002', started_at: '2026-11-12T08:05:00Z' });
+  assert.deepEqual(s.latestRuns().map((r) => r.id), ['run-1-00000002']);
+  assert.equal(s.markInterrupted('2026-11-12T09:00:00Z'), 1);
+  assert.equal(s.run('run-1-00000002').outcome, 'interrupted');
+  assert.equal(s.run('run-1-00000001').outcome, 'allowed');
 });
